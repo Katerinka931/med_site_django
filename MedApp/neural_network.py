@@ -1,0 +1,94 @@
+import numpy as np
+import pandas as pd
+from keras_preprocessing import image
+from tensorflow import keras
+from keras.preprocessing.image import ImageDataGenerator
+import pydicom as dicom
+from PIL import Image
+
+model = keras.models.load_model("D:/Desktop/Диплом/django+angular/med_site_django/KerasModel", custom_objects=None, compile=True,
+                                options=None)
+
+train_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
+    directory='D:/Desktop/Диплом/НИР/Workspace/dataset/archive/train',
+    target_size=(224, 224),
+    color_mode="grayscale",
+    batch_size=32,
+    class_mode="categorical",
+    shuffle=True, seed=42)
+
+test_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
+    directory='D:/Desktop/Диплом/НИР/Workspace/dataset/archive/test',
+    target_size=(224, 224),
+    color_mode="grayscale",
+    batch_size=1,
+    class_mode=None,
+    shuffle=False,
+    seed=42)
+
+
+class Neural_Network():
+    def open_dicom(self, image_path, img_name):
+        ds = dicom.read_file(image_path)
+        file = ds.pixel_array
+
+        # save as jpg
+        new_image = file.astype(float)
+        scaled_image = (np.maximum(new_image, 0) / new_image.max()) * 255.0
+        scaled_image = np.uint8(scaled_image)
+        final_image = Image.fromarray(scaled_image)
+
+        jpg_path = 'D:/Desktop/Диплом/django+angular/med_site_django/MedApp/temp_storage/' + img_name + '.jpg'
+        final_image.save(jpg_path)
+        return self.predict_image(jpg_path)
+
+    def predict_image(self, img_path):
+        img = image.load_img(img_path, target_size=(224, 224), grayscale=True)
+        img_arr = image.img_to_array(img)
+        img_arr = np.expand_dims(img_arr, axis=0)
+        pred = model.predict(img_arr)
+
+        # predict image
+        predicted = np.argmax(pred, axis=1)
+        labels = (train_generator.class_indices)
+        labels = dict((v, k) for k, v in labels.items())
+        predictions = [labels[k] for k in predicted]
+
+        return predictions[0]
+
+
+    def get_statistic(self): #result = 79,7%
+        # Predict Output
+        STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
+        test_generator.reset()
+        pred = model.predict(test_generator,
+                             steps=STEP_SIZE_TEST,
+                             verbose=1)
+
+        predicted_class_indices = np.argmax(pred, axis=1)
+
+        labels = (train_generator.class_indices)
+        labels = dict((v, k) for k, v in labels.items())
+        predictions = [labels[k] for k in predicted_class_indices]
+
+        current_idx = 0
+        count_accurate = 0
+        Actual = []
+        for i in predictions:
+            string = test_generator.filenames[current_idx]
+            substr = '\\'
+            actual = string[:string.find(substr)]
+            Actual.append(actual)
+            pred = predictions[current_idx]
+            if actual == pred:
+                count_accurate += 1
+            current_idx += 1
+        acc = count_accurate / 771
+        print(f"The accuracy on predicted the test images is {round(acc * 100, 2)}%.")
+
+
+    def save_to_file(self, predictions, name_of_file):  # "results.csv"
+        results = pd.DataFrame({"Filename": name_of_file,
+                                "Predictions": predictions})
+        results.to_csv(name_of_file, index=False)
+

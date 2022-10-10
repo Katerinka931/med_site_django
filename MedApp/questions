@@ -1,0 +1,30 @@
+Оптимизировать методы:
+profile - edit_doctor - create_user!!!
+
+
+оптимизация:
+уменьшение количества обращений к базе данных
+
+
+
+
+
+#########################################################################################
+angular
+private updateData(data: any) {
+    //
+    this.errors = [];
+    // декодирование токена для получения логина и времени жизни токена
+    const token_parts = data['access'].split(/\./);
+    const token_decoded = JSON.parse(window.atob(token_parts[1]));
+    const token_expires = new Date(token_decoded.exp * 1000);
+
+    const timeout = this.token_expires.getTime() - Date.now() - (60 * 1000);
+  }
+
+
+
+
+
+
+
