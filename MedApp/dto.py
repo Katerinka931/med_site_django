@@ -3,6 +3,7 @@ from MedApp.models import Doctor, Patient, Photo
 
 class DoctorDTO(object):
     def __init__(self, doctor: Doctor):
+        self.id = doctor.id
         self.role = doctor.role
         self.login = doctor.login
         self.email = doctor.email
@@ -14,6 +15,7 @@ class DoctorDTO(object):
 
 class DoctorWithPatientsDTO(object):
     def __init__(self, doctor: Doctor, patients: list):
+        self.id = doctor.id
         self.role = doctor.role
         self.login = doctor.login
         self.email = doctor.email

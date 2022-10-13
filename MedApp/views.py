@@ -123,8 +123,59 @@ def create_user(request):
     return JsonResponse({'message': ''}, safe=False)
 
 
-# todo set here edit_user
-# todo set here doctors_info
+@permission_classes([IsAuthenticated, ])
+@api_view(['GET', 'PUT'])
+def edit_user(request, usr):
+    doctor = Doctor.objects.get(id=usr)
+    transfer_object = DoctorDTO(doctor)
+
+    if request.method == 'GET':
+        return JsonResponse({'user': vars(transfer_object)})
+
+    if request.method == 'PUT':
+        data = JSONParser().parse(request)
+        lastname = data['last_name']
+        firstname = data['first_name']
+        middlename = data['middle_name']
+        email = data['email']
+        phone = data['phone']
+        login = data['login']
+
+        if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
+            return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
+                                safe=False)
+        else:
+            try:
+                doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
+                return JsonResponse({'message': 'Редактирование успешно'},
+                                    safe=False)
+            except Exception:
+                return JsonResponse(
+                    {'message': 'Пользователь с таким логином уже существует'},
+                    safe=False)
+
+
+@api_view(['GET', 'DELETE'])
+def doctors_info(request, usr):
+    remove_id = request.GET.get("remove")
+    doctor = Doctor.objects.get(pk=usr)
+
+    if request.method == 'GET':
+        patients = get_patients(doctor)
+        doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
+
+        return JsonResponse(
+            {'user': vars(doctor_transfer_object)}, safe=False)
+
+    if request.method == 'DELETE':
+        if remove_id != None:
+            remove_person(remove_id, doctor.role, 'pat')
+
+            patients = get_patients(doctor)
+            doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
+            return JsonResponse({'message': 'Удаление успешно', 'user': vars(doctor_transfer_object)}, safe=False)
+
+
 @permission_classes([IsAuthenticated, ])
 @api_view(['GET', 'POST'])
 def create_patient(request):
@@ -209,81 +260,48 @@ def create_auth_user(login, email, password, firstname, lastname):
     user.save()
 
 
+
+
+
 ###################### old version ######################
-
-
-@api_view(['GET', 'POST'])
-def edit_user(request, usr):
-    pk = request.user.id
-
-    admin = Doctor.objects.get(id=pk)
-    doctor = Doctor.objects.get(id=usr)
-
-    if request.method == 'GET':
-        return JsonResponse({'message': ''})
-
-    if request.method == 'POST':
-        lastname = request.POST.get('last_name')
-        firstname = request.POST.get('first_name')
-        middlename = request.POST.get('middle_name')
-        email = request.POST.get('email')
-        phone = request.POST.get('phone')
-        login = request.POST.get('login')
-
-        if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
-            return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
-                                safe=False)
-        else:
-            try:
-                doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
-                return JsonResponse({'message': 'Редактирование успешно'},
-                                    safe=False)
-            except Exception:
-                return JsonResponse(
-                    {'message': 'Пользователь с таким логином уже существует'},
-                    safe=False)
-
-
 @api_view(['GET', 'POST'])
 def edit_patient(request, pat):
-    pk = request.user.id
     patient = Patient.objects.get(pk=pat)
+    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+    patient_transfer = PatientDTO(patient, patients_doctor)
 
-    # if см create patient
-    doctor = Doctor.objects.get(pk=pk)
+    if request.method == 'GET':
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
 
-    if request.method == 'POST':
+    if request.method == 'PUT':
         try:
 
             return  # save_patient(request, doctor, patient, None, transfer_object)
         except Exception:
             return JsonResponse(
                 {'message': 'Невозможно редактировать несуществующего пациента'}, safe=False)
-
-
-@api_view(['GET', 'DELETE'])
-def doctors_info(request, doc):
-    pk = request.user.id
-
-    remove_id = request.GET.get("remove")
-    admin = Doctor.objects.get(id=pk)
-    doctor = Doctor.objects.get(pk=doc)
-
-    if request.method == 'GET':
-        patients = get_patients(doctor)
-        doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
-
-        return JsonResponse(
-            {'message': '', 'doctor': vars(doctor_transfer_object)}, safe=False)
-
-    if request.method == 'DELETE':
-        if remove_id != None:
-            remove_person(remove_id, admin.role, 'pat')
-
-            patients, doctors = get_patients(doctor)
-            doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
-            return JsonResponse({'message': 'Удаление успешно', 'doctor': vars(doctor_transfer_object)}, safe=False)
-
+#
+#     if request.method == 'PUT':
+#         data = JSONParser().parse(request)
+#         lastname = data['last_name']
+#         firstname = data['first_name']
+#         middlename = data['middle_name']
+#         email = data['email']
+#         phone = data['phone']
+#         login = data['login']
+#
+#         if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
+#             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
+#                                 safe=False)
+#         else:
+#             try:
+#                 doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
+#                 return JsonResponse({'message': 'Редактирование успешно'},
+#                                     safe=False)
+#             except Exception:
+#                 return JsonResponse(
+#                     {'message': 'Пользователь с таким логином уже существует'},
+#                     safe=False)
 
 @api_view(['GET', 'POST'])
 def patients_info(request, pat):
@@ -294,7 +312,8 @@ def patients_info(request, pat):
     if request.method == 'GET':
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
 
-    if request.method == 'POST':
+    # todo load pat`s image?
+    if request.method == 'POST': #PUT
         # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
 
@@ -350,3 +369,11 @@ def save_patient(request, doctor, patient, another_doctor_id, transfer_object):
 
         patient.create_patient(lastname, firstname, middlename, email, phone, date_of_birth, id, diagnosys)
         return JsonResponse({'message': 'message'}, safe=False)
+
+
+#todo
+# недоделанные странички:
+# user_info
+# patient info
+# load image
+# edit doc - password - profile
