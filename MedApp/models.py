@@ -12,13 +12,13 @@ class Doctor(models.Model):
     last_name = models.CharField(max_length=100)
     middle_name = models.CharField(max_length=100, null=True)
 
-    def create_or_edit_doctor(self, lastname, firstname, middlename, email, phone, login):
+    def create_or_edit_doctor(self, lastname, firstname, middlename, email, phone, login, role):
         if self.pk == None:
             doctor = Doctor()
-            doctor.role = 'doctor'
         else:
             doctor = self
 
+        doctor.role = role
         doctor.last_name = lastname
         doctor.first_name = firstname
         doctor.middle_name = middlename
@@ -76,3 +76,11 @@ class Photo(models.Model):
     photo = models.CharField(max_length=100)
     number_of_instance = models.CharField(max_length=10)
     actual = models.CharField(max_length=5)
+
+    def save_photo(self, patient_id, loaded_file):
+        photo = Photo()
+        photo.photo = loaded_file
+        # photo.number_of_instance
+        # photo.actual
+        photo.patient_number = 18#patient_id
+        photo.save()

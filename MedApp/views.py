@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import *
-from MedApp.models import Doctor, Patient
+from MedApp.models import Doctor, Patient, Photo
 from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO
 from MedApp.neural_network import Neural_Network
 
@@ -41,7 +41,7 @@ def patients_list(request):
     pk = request.user.id
     doctor = Doctor.objects.get(id=pk)
 
-    patients = get_patients(doctor)
+    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
     remove_id = request.GET.get("remove")
 
     if request.method == 'DELETE':
@@ -94,14 +94,25 @@ def create_user(request):
     doc = Doctor()
 
     if request.method == 'POST':
-        last_name = data['last_name']
-        first_name = data['first_name']
-        middle_name = data['middle_name']
-        email = data['email']
-        phone = data['phone']
-        login = data['login']
-        password = data['password']
-        password_repeat = data['password_repeat']
+        try:
+            role = define_role(data['role'].lower())
+            last_name = data['last_name']
+            first_name = data['first_name']
+            middle_name = data['middle_name']
+            email = data['email']
+            phone = data['phone']
+            try:
+                int(data['phone'])
+            except ValueError:
+                return JsonResponse({'message': 'Некорректный ввод номера телефона'},
+                                    status=status.HTTP_409_CONFLICT)
+
+            login = data['login']
+            password = data['password']
+            password_repeat = data['password_repeat']
+        except Exception:
+            return JsonResponse({'message': 'Все поля должны быть заполнены'},
+                                status=status.HTTP_409_CONFLICT)
 
         if password_repeat == password:
             if Doctor.objects.filter(email=email):
@@ -110,7 +121,7 @@ def create_user(request):
             else:
                 try:
                     create_auth_user(login, email, password, first_name, last_name)
-                    doc.create_or_edit_doctor(last_name, first_name, middle_name, email, phone, login)
+                    doc.create_or_edit_doctor(last_name, first_name, middle_name, email, phone, login, role)
                     return JsonResponse({'message': 'Пользователь успешно создан'}, status=status.HTTP_200_OK)
                 except Exception:
                     return JsonResponse(
@@ -134,25 +145,30 @@ def edit_user(request, usr):
 
     if request.method == 'PUT':
         data = JSONParser().parse(request)
+        role = define_role(data['role'].lower())
         lastname = data['last_name']
         firstname = data['first_name']
         middlename = data['middle_name']
         email = data['email']
         phone = data['phone']
+        try:
+            int(data['phone'])
+        except ValueError:
+            return JsonResponse({'message': 'Некорректный ввод номера телефона'},
+                                status=status.HTTP_409_CONFLICT)
         login = data['login']
 
         if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
-                                safe=False)
+                                safe=False, status=status.HTTP_409_CONFLICT)
         else:
             try:
-                doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
-                return JsonResponse({'message': 'Редактирование успешно'},
-                                    safe=False)
+                doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login, role)
+                return JsonResponse({'message': 'Редактирование успешно'}, safe=False)
             except Exception:
                 return JsonResponse(
                     {'message': 'Пользователь с таким логином уже существует'},
-                    safe=False)
+                    safe=False, status=status.HTTP_409_CONFLICT)
 
 
 @api_view(['GET', 'DELETE'])
@@ -180,21 +196,35 @@ def doctors_info(request, usr):
 @api_view(['GET', 'POST'])
 def create_patient(request):
     pk = request.user.id
-    data = JSONParser().parse(request)
     patient = Patient()
 
+    if request.method == 'GET':
+        doctors = get_doctors_list(
+            Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
+        return JsonResponse({'message': '', 'doctors': doctors}, safe=False)
+
     if request.method == 'POST':
-        last_name = data['last_name']
-        first_name = data['first_name']
-        middle_name = data['middle_name']
-        email = data['email']
-        phone = data['phone']
-        date_of_birth = data['date_of_birth']
-        diagnosys = data['diagnosys']
-        if Doctor.objects.get(pk=pk).role == 'DOCTOR':
-            doctor_number = pk
-        else:
-            doctor_number = data['doctor_number']
+        try:
+            data = JSONParser().parse(request)
+            last_name = data['last_name']
+            first_name = data['first_name']
+            middle_name = data['middle_name']
+            email = data['email']
+            phone = data['phone']
+            try:
+                int(data['phone'])
+            except ValueError:
+                return JsonResponse({'message': 'Некорректный ввод номера телефона'},
+                                    status=status.HTTP_409_CONFLICT)
+            date_of_birth = data['date_of_birth']
+            diagnosys = data['diagnosys']
+            if Doctor.objects.get(pk=pk).role == 'DOCTOR':
+                doctor_number = pk
+            else:
+                doctor_number = data['doctor_number']
+        except Exception:
+            return JsonResponse({'message': 'Все поля должны быть заполнены'},
+                                status=status.HTTP_409_CONFLICT)
 
         if Patient.objects.filter(email=email):
             return JsonResponse(
@@ -205,9 +235,57 @@ def create_patient(request):
             return JsonResponse({'message': 'Пациент успешно создан'}, safe=False)
 
 
-# todo set here edit_patient
-# todo set here patients_info
+@api_view(['GET', 'PUT'])
+def edit_patient(request, pat):
+    pk = request.user.id
+    patient = Patient.objects.get(pk=pat)
+    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+    patient_transfer = PatientDTO(patient, patients_doctor)
+    doctors = get_doctors_list(
+        Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
 
+    if request.method == 'GET':
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'doctors': doctors}, safe=False)
+
+    if request.method == 'PUT':
+        try:
+            data = JSONParser().parse(request)
+            lastname = data['last_name']
+            firstname = data['first_name']
+            middlename = data['middle_name']
+            email = data['email']
+            phone = data['phone']
+            try:
+                int(phone)
+            except ValueError:
+                return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
+
+            date_of_birth = data['date_of_birth']
+            diagnosys = data['diagnosys']
+
+            if Doctor.objects.get(pk=pk).role == 'DOCTOR':
+                doctor_number = pk
+            else:
+                doctor_number = data['doctor_number']
+        except Exception:
+            return JsonResponse({'message': 'Все поля должны быть заполнены'},
+                                status=status.HTTP_409_CONFLICT)
+
+        if Patient.objects.filter(email=email).exclude(pk=pat):
+            return JsonResponse(
+                {'message': 'Пациент с таким адресом электронной почты уже существует'}, safe=False,
+                status=status.HTTP_409_CONFLICT)
+        else:
+            try:
+                patient.create_patient(lastname, firstname, middlename, email, phone, date_of_birth, doctor_number,
+                                       diagnosys)
+                return JsonResponse({'message': 'Редактирование успешно'}, safe=False)
+            except Exception:
+                return JsonResponse({'message': 'Неверно введена дата рождения'}, safe=False,
+                                    status=status.HTTP_409_CONFLICT)
+
+
+# todo set here patients_info
 # todo set here load_image
 
 
@@ -232,16 +310,21 @@ def get_doctors_list(doctors_queryset):
 
 
 def get_list_of_people(pk, user_role):
-    if user_role == 'ADMIN' or user_role == 'CHIEF':
-        people = get_doctors_list(Doctor.objects.all().exclude(pk=pk))
+    if user_role == 'ADMIN':
+        people = get_doctors_list(Doctor.objects.all().exclude(pk=pk).order_by('last_name'))
+    elif user_role == 'CHIEF':
+        people = get_doctors_list(Doctor.objects.filter(role='DOCTOR').order_by('last_name'))
+    elif user_role == 'OPERATOR':
+        people = get_patients_list(Patient.objects.all().order_by('last_name'))
     else:
-        people = get_patients_list(Patient.objects.filter(doctor_number_id=pk))
+        people = get_patients_list(Patient.objects.filter(doctor_number_id=pk).order_by('last_name'))
     return people
 
 
 def get_patients(doctor):
-    return get_patients_list(Patient.objects.all()) if doctor.role == 'OPERATOR' else get_patients_list(
-        Patient.objects.filter(doctor_number=doctor.pk))
+    return get_patients_list(
+        Patient.objects.all().order_by('last_name')) if doctor.role == 'OPERATOR' else get_patients_list(
+        Patient.objects.filter(doctor_number=doctor.pk).order_by('last_name'))
 
 
 def remove_person(remove_id, user_role, deleted_person_type):
@@ -260,49 +343,16 @@ def create_auth_user(login, email, password, firstname, lastname):
     user.save()
 
 
-
+def define_role(role):
+    switcher = {
+        "врач": 'DOCTOR',
+        "главный врач": 'CHIEF',
+        "оператор": 'OPERATOR',
+    }
+    return switcher.get(role)
 
 
 ###################### old version ######################
-@api_view(['GET', 'POST'])
-def edit_patient(request, pat):
-    patient = Patient.objects.get(pk=pat)
-    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
-    patient_transfer = PatientDTO(patient, patients_doctor)
-
-    if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
-
-    if request.method == 'PUT':
-        try:
-
-            return  # save_patient(request, doctor, patient, None, transfer_object)
-        except Exception:
-            return JsonResponse(
-                {'message': 'Невозможно редактировать несуществующего пациента'}, safe=False)
-#
-#     if request.method == 'PUT':
-#         data = JSONParser().parse(request)
-#         lastname = data['last_name']
-#         firstname = data['first_name']
-#         middlename = data['middle_name']
-#         email = data['email']
-#         phone = data['phone']
-#         login = data['login']
-#
-#         if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
-#             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
-#                                 safe=False)
-#         else:
-#             try:
-#                 doctor.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
-#                 return JsonResponse({'message': 'Редактирование успешно'},
-#                                     safe=False)
-#             except Exception:
-#                 return JsonResponse(
-#                     {'message': 'Пользователь с таким логином уже существует'},
-#                     safe=False)
-
 @api_view(['GET', 'POST'])
 def patients_info(request, pat):
     patient = Patient.objects.get(pk=pat)
@@ -312,8 +362,8 @@ def patients_info(request, pat):
     if request.method == 'GET':
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
 
-    # todo load pat`s image?
-    if request.method == 'POST': #PUT
+    # загрузить изображение
+    if request.method == 'POST':  # PUT
         # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
 
@@ -321,24 +371,44 @@ def patients_info(request, pat):
 @permission_classes([IsAuthenticated, ])
 @api_view(['GET', 'POST'])
 def load_image(request):
+    act = request.GET.get('act')
     processing = Neural_Network()
-    result = None
+    photo_object = Photo()
+
+    if request.method == 'GET':
+        patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+        return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
     if request.method == 'POST':
-        img = request.FILES['file']
-        # todo возможно это как-то иначе переделать? чтобы не сохранялось? ну, пока так
-        # сохраняем на файловой системе???
-        fs = FileSystemStorage(location='D:/Desktop/django+angular/med_site_django/MedApp/temp_storage')
-        filename = fs.save(img.name, img)  # здесь будет сохраняться диком?
-        file_url = fs.path(filename)
-        result = processing.predict_image(file_url)
-        # result = processing.open_dicom(file_url, filename)
-        fs.delete(filename)
-        # acc = processing.get_statistic()
+        if act == 'save':
+            data = JSONParser().parse(request)
+            diagnosys = data['diagnosys']
+            patient_id = data['pat_id']
+            photo = data['photo']
 
-        return JsonResponse({'result': result})
+            # сохранение в основную таблицу диагноза
+            patient = Patient.objects.get(pk=patient_id)
+            patient.diagnosys = diagnosys
+            patient.save()
+
+            # сохранение фотографии в таблицу Photo
+            photo_object.save_photo(patient_id, photo) # todo тут ошибка при сохранении id пациента!
+
+            return JsonResponse({'message': ''})
+        else:
+            img = request.FILES['file']
+            # todo возможно это как-то иначе переделать? чтобы не сохранялось? ну, пока так  // сохранение на сервере, но сделать обзор файловых систем
+            fs = FileSystemStorage(location='D:/Desktop/django+angular/med_site_django/MedApp/temp_storage')
+            filename = fs.save(img.name, img)  # здесь будет сохраняться диком?
+            file_url = fs.path(filename)
+            result = processing.predict_image(file_url)
+            # result = processing.open_dicom(file_url, filename)
+            fs.delete(filename)
+
+            return JsonResponse({'result': result})
 
     return JsonResponse({})
+
 
 
 @api_view(['POST'])
@@ -346,34 +416,9 @@ def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
-
-# delete this additional function
-def save_patient(request, doctor, patient, another_doctor_id, transfer_object):
-    id = doctor.pk
-
-    lastname = request.POST['last_name']
-    firstname = request.POST['first_name']
-    middlename = request.POST['middle_name']
-    email = request.POST['email']
-    phone = request.POST['phone']
-    date_of_birth = request.POST['date_of_birth']
-    diagnosys = request.POST.get('diagnosys')
-
-    if Patient.objects.filter(email=email).exclude(pk=patient.pk):
-        return JsonResponse(
-            {'message': 'Пациент с таким адресом электронной почты уже существует', 'user': vars(transfer_object)},
-            safe=False)
-    else:
-        if another_doctor_id != None:
-            id = another_doctor_id
-
-        patient.create_patient(lastname, firstname, middlename, email, phone, date_of_birth, id, diagnosys)
-        return JsonResponse({'message': 'message'}, safe=False)
-
-
-#todo
+# todo общее
 # недоделанные странички:
-# user_info
-# patient info
-# load image
+# patient info - загрузка фото и выгрузка.
+# load image - отображение фото на экране + (дополнительно поиск по пациентам для ускорения добавления пациента)
 # edit doc - password - profile
+# оператор не должен иметь при себе список пациентов. отследить это и выводить какую-то другую инфу или как?

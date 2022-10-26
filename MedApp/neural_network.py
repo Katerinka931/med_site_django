@@ -6,7 +6,8 @@ from keras.preprocessing.image import ImageDataGenerator
 import pydicom as dicom
 from PIL import Image
 
-model = keras.models.load_model("D:/Desktop/Диплом/django+angular/med_site_django/KerasModel", custom_objects=None, compile=True,
+model = keras.models.load_model("D:/Desktop/Диплом/django+angular/med_site_django/KerasModel", custom_objects=None,
+                                compile=True,
                                 options=None)
 
 train_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
@@ -42,6 +43,15 @@ class Neural_Network():
         final_image.save(jpg_path)
         return self.predict_image(jpg_path)
 
+    def get_diagnosys(self, prediction):
+        switcher = {
+            "PNEUMONIA": "Пневмония",
+            "NORMAL": "Патологий не обнаружено",
+            "TURBERCULOSIS": "Туберкулез",
+            "COVID19": "Covid-19",
+        }
+        return switcher.get(prediction)
+
     def predict_image(self, img_path):
         img = image.load_img(img_path, target_size=(224, 224), grayscale=True)
         img_arr = image.img_to_array(img)
@@ -54,10 +64,9 @@ class Neural_Network():
         labels = dict((v, k) for k, v in labels.items())
         predictions = [labels[k] for k in predicted]
 
-        return predictions[0]
+        return self.get_diagnosys(predictions[0])
 
-
-    def get_statistic(self): #result = 79,7%
+    def get_statistic(self):  # result = 79,7%
         # Predict Output
         STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
         test_generator.reset()
@@ -86,9 +95,7 @@ class Neural_Network():
         acc = count_accurate / 771
         print(f"The accuracy on predicted the test images is {round(acc * 100, 2)}%.")
 
-
     def save_to_file(self, predictions, name_of_file):  # "results.csv"
         results = pd.DataFrame({"Filename": name_of_file,
                                 "Predictions": predictions})
         results.to_csv(name_of_file, index=False)
-
