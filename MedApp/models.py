@@ -77,10 +77,14 @@ class Photo(models.Model):
     number_of_instance = models.CharField(max_length=10)
     actual = models.CharField(max_length=5)
 
-    def save_photo(self, patient_id, loaded_file):
+    def save_photo(self, patient, loaded_file):
         photo = Photo()
         photo.photo = loaded_file
-        # photo.number_of_instance
-        # photo.actual
-        photo.patient_number = 18#patient_id
+
+        # делаем все предыдущие неактуальными
+        Photo.objects.filter(patient_number_id=patient.pk).update(actual=0)
+        # todo удалять неактуальные фото? или оставлять для истории?
+
+        photo.actual = 1
+        photo.patient_number = patient
         photo.save()

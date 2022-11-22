@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pandas as pd
 from keras_preprocessing import image
@@ -5,6 +7,7 @@ from tensorflow import keras
 from keras.preprocessing.image import ImageDataGenerator
 import pydicom as dicom
 from PIL import Image
+from django.core.files.storage import FileSystemStorage
 
 model = keras.models.load_model("D:/Desktop/Диплом/django+angular/med_site_django/KerasModel", custom_objects=None,
                                 compile=True,
@@ -40,8 +43,12 @@ class Neural_Network():
         final_image = Image.fromarray(scaled_image)
 
         jpg_path = 'D:/Desktop/Диплом/django+angular/med_site_django/MedApp/temp_storage/' + img_name + '.jpg'
+
         final_image.save(jpg_path)
-        return self.predict_image(jpg_path)
+        result = self.predict_image(jpg_path)
+        os.remove(jpg_path) # todo set?
+
+        return result
 
     def get_diagnosys(self, prediction):
         switcher = {

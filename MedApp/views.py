@@ -1,5 +1,6 @@
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse
 from rest_framework import status
@@ -60,6 +61,23 @@ def profile(request):
     user = Doctor.objects.get(pk=pk)
     transfer_object = DoctorDTO(user)
 
+    if request.method == 'POST':
+        data = JSONParser().parse(request)
+        password = data['password']
+        new_password = data['new_password']
+        new_password_repeat = data['new_password_repeat']
+
+        usr = authenticate(username=user.login, password=password)
+        if usr is not None:
+            if new_password == new_password_repeat:
+                usr.set_password(new_password)
+                usr.save()
+                return JsonResponse({'message': 'Пароль успешно изменен'})
+            else:
+                return JsonResponse({'message': 'Пароли не совпадают'})
+        else:
+            return JsonResponse({'message': 'Неверно введен старый пароль'})
+
     if request.method == 'PUT':
         data = JSONParser().parse(request)
         lastname = data['last_name']
@@ -73,15 +91,15 @@ def profile(request):
             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует',
                                  'user': vars(transfer_object)}, safe=False)
         else:
-            try:
-                user.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login)
-                transfer_object = DoctorDTO(user)
-                return JsonResponse({'message': 'Редактирование успешно', 'user': vars(transfer_object)},
-                                    safe=False)
-            except Exception:
+            if Doctor.objects.filter(login=login).exclude(pk=user.pk):
                 return JsonResponse(
                     {'message': 'Пользователь с таким логином уже существует', 'user': vars(transfer_object)},
                     safe=False)
+            else:
+                user.create_or_edit_doctor(lastname, firstname, middlename, email, phone, login, user.role)
+                transfer_object = DoctorDTO(user)
+                return JsonResponse({'message': 'Редактирование успешно', 'user': vars(transfer_object)},
+                                    safe=False)
 
     if request.method == 'GET':
         return JsonResponse({'user': vars(transfer_object)}, safe=False)
@@ -352,6 +370,13 @@ def define_role(role):
     return switcher.get(role)
 
 
+def save_file(file):
+    fs = FileSystemStorage(location='D:/Desktop/Диплом/django+angular/med_site_django/MedApp/temp_storage')
+    filename = fs.save(file.name, file)
+    file_url = fs.path(filename)
+    return fs, filename, file_url
+
+
 ###################### old version ######################
 @api_view(['GET', 'POST'])
 def patients_info(request, pat):
@@ -362,7 +387,7 @@ def patients_info(request, pat):
     if request.method == 'GET':
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
 
-    # загрузить изображение
+    # загрузить изображение todo ?
     if request.method == 'POST':  # PUT
         # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
@@ -381,28 +406,28 @@ def load_image(request):
 
     if request.method == 'POST':
         if act == 'save':
-            data = JSONParser().parse(request)
-            diagnosys = data['diagnosys']
-            patient_id = data['pat_id']
-            photo = data['photo']
+            photo = request.FILES['file']
+            diagnosys = request.POST.get('diagnosys')
+            patient_id = request.POST.get('pat_id')
 
-            # сохранение в основную таблицу диагноза
             patient = Patient.objects.get(pk=patient_id)
             patient.diagnosys = diagnosys
-            patient.save()
+            fs, filename, file_url = save_file(photo)
 
-            # сохранение фотографии в таблицу Photo
-            photo_object.save_photo(patient_id, photo) # todo тут ошибка при сохранении id пациента!
+            patient.save()
+            photo_object.save_photo(patient, file_url)
 
             return JsonResponse({'message': ''})
         else:
             img = request.FILES['file']
-            # todo возможно это как-то иначе переделать? чтобы не сохранялось? ну, пока так  // сохранение на сервере, но сделать обзор файловых систем
-            fs = FileSystemStorage(location='D:/Desktop/django+angular/med_site_django/MedApp/temp_storage')
-            filename = fs.save(img.name, img)  # здесь будет сохраняться диком?
-            file_url = fs.path(filename)
-            result = processing.predict_image(file_url)
-            # result = processing.open_dicom(file_url, filename)
+            fs, filename, file_url = save_file(img)
+
+            # todo временная мера: если файл вдруг не диком, то обрабатывается jpeg
+            try:
+                result = processing.open_dicom(file_url, filename)
+            except Exception:
+                result = processing.predict_image(file_url)
+
             fs.delete(filename)
 
             return JsonResponse({'result': result})
@@ -410,15 +435,20 @@ def load_image(request):
     return JsonResponse({})
 
 
-
 @api_view(['POST'])
 def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
-# todo общее
-# недоделанные странички:
-# patient info - загрузка фото и выгрузка.
-# load image - отображение фото на экране + (дополнительно поиск по пациентам для ускорения добавления пациента)
-# edit doc - password - profile
-# оператор не должен иметь при себе список пациентов. отследить это и выводить какую-то другую инфу или как?
+# ПОДУМАТЬ!!!
+# 1. patient info - ПРЕОБРАЗОВАНИЕ ПЕРЕД КАЖДОЙ ВЫГРУЗКОЙ ИЛИ ПРОЩЕ ХРАНИТЬ JPEG? выгрузить преобразованное фото на экран.
+
+# 2. load image
+#   - отображение фото на экране
+#   - (дополнительно) поиск по пациентам для ускорения добавления пациента
+
+# 3. изменить пароль - модальное окно!
+
+# 4. выход logout
+#   - запрет возврата назад
+#   - наведение мыши
