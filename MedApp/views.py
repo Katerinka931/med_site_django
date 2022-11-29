@@ -70,13 +70,16 @@ def profile(request):
         usr = authenticate(username=user.login, password=password)
         if usr is not None:
             if new_password == new_password_repeat:
-                usr.set_password(new_password)
-                usr.save()
-                return JsonResponse({'message': 'Пароль успешно изменен'})
+                if password == new_password:
+                    return JsonResponse({'message': 'Старый и новый пароли совпадают'}, status=status.HTTP_409_CONFLICT)
+                else:
+                    usr.set_password(new_password)
+                    usr.save()
+                    return JsonResponse({'message': 'Пароль успешно изменен'})
             else:
-                return JsonResponse({'message': 'Пароли не совпадают'})
+                return JsonResponse({'message': 'Пароли не совпадают'}, status=status.HTTP_409_CONFLICT)
         else:
-            return JsonResponse({'message': 'Неверно введен старый пароль'})
+            return JsonResponse({'message': 'Неверно введен старый пароль'}, status=status.HTTP_409_CONFLICT)
 
     if request.method == 'PUT':
         data = JSONParser().parse(request)
@@ -447,8 +450,6 @@ def user_logout(request):
 #   - отображение фото на экране
 #   - (дополнительно) поиск по пациентам для ускорения добавления пациента
 
-# 3. изменить пароль - модальное окно!
-
-# 4. выход logout
+# 3. выход logout
 #   - запрет возврата назад
 #   - наведение мыши
