@@ -46,9 +46,41 @@ class Neural_Network():
 
         final_image.save(jpg_path)
         result = self.predict_image(jpg_path)
-        os.remove(jpg_path) # todo set?
+        os.remove(jpg_path)  # todo set?
 
         return result
+
+    def jpg_to_dicom(self, path, img_name, dcm_name): # todo change
+        im = Image.open(path + img_name + '.jpeg')  # here jpeg or jpg
+
+        file_path = os.path.join(path, '1')
+        ds = dicom.dcmread(file_path, force=True)
+
+        if im.mode == 'L':
+            np_image = np.array(im.getdata(), dtype=np.uint8)
+            ds.Rows = im.height
+            ds.Columns = im.width
+            ds.PhotometricInterpretation = "MONOCHROME1"
+            ds.SamplesPerPixel = 1
+            ds.BitsStored = 8
+            ds.BitsAllocated = 8
+            ds.HighBit = 7
+            ds.PixelRepresentation = 0
+            ds.PixelData = np_image.tobytes()
+            ds.save_as(dcm_name)
+
+        if im.mode == 'RGBA':
+            np_image = np.array(im.getdata(), dtype=np.uint8)[:, :3]
+            ds.Rows = im.height
+            ds.Columns = im.width
+            ds.PhotometricInterpretation = "RGB"
+            ds.SamplesPerPixel = 3
+            ds.BitsStored = 8
+            ds.BitsAllocated = 8
+            ds.HighBit = 7
+            ds.PixelRepresentation = 0
+            ds.PixelData = np_image.tobytes()
+            ds.save_as(dcm_name)
 
     def get_diagnosys(self, prediction):
         switcher = {
