@@ -1,3 +1,4 @@
+from PIL import Image
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
@@ -407,13 +408,18 @@ def load_image(request):
 
     if request.method == 'POST':
         if act == 'save':
-            photo = request.FILES['file']
+            file = request.FILES['file']
             diagnosys = request.POST.get('diagnosys')
             patient_id = request.POST.get('pat_id')
 
+            fs, filename, file_url = save_file(file)
+            final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
+            fs.delete(filename)
+
+            final_image.save(jpg_path)
+
             patient = Patient.objects.get(pk=patient_id)
             patient.diagnosys = diagnosys
-            fs, filename, file_url = save_file(photo)
 
             patient.save()
             photo_object.save_photo(patient, file_url)
@@ -425,7 +431,7 @@ def load_image(request):
 
             # todo временная мера: если файл вдруг не диком, то обрабатывается jpeg
             try:
-                result = processing.open_dicom(file_url, filename)
+                result = processing.process(file_url, filename)
             except Exception:
                 result = processing.predict_image(file_url)
 
@@ -446,15 +452,13 @@ def user_logout(request):
 # 1. load image
 #   - отображение фото на экране
 
-# 2. удалить все фото одного пациента - кнопка в профиле пациента
+# 2. удалить _все_ фото одного пациента - кнопка в профиле пациента
 
 # 3. выход logout
 #   - запрет возврата назад
 #   - наведение мыши
 
-# ------после завершения проверять код на грамотность и вносить исправления ------
+# 4. сделать кнопку преобразования в диком и сохранения где-нибудь. по сути - кнопку скачивания,
+# в которой преобразуется jpeg в диком
 
-
-# определить момент сохранения изображения. и найти(создать) диком-файл нужный
-
-# ответ: хранить jpg, при скачивании врачом - преобразовывать в диком. потому что jpeg меньше по размеру для хранения на сервере и пользователю показывать jpg
+# ------после завершения проверять код на грамотность и вносить исправления ------ #

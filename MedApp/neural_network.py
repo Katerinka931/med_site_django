@@ -32,7 +32,7 @@ test_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
 
 
 class Neural_Network():
-    def open_dicom(self, image_path, img_name):
+    def dicom_to_jpg(self, image_path, img_name):
         ds = dicom.read_file(image_path)
         file = ds.pixel_array
 
@@ -44,9 +44,14 @@ class Neural_Network():
 
         jpg_path = 'D:/Desktop/Диплом/django+angular/med_site_django/MedApp/temp_storage/' + img_name + '.jpg'
 
+        return final_image, jpg_path
+
+    def process(self, image_path, img_name):
+        final_image, jpg_path = self.dicom_to_jpg(image_path, img_name)
+
         final_image.save(jpg_path)
         result = self.predict_image(jpg_path)
-        os.remove(jpg_path)  # todo set?
+        os.remove(jpg_path)
 
         return result
 
