@@ -400,12 +400,10 @@ def patients_info(request, pat):
 @api_view(['GET', 'POST'])
 def load_image(request):
     act = request.GET.get('act')
+    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+
     processing = Neural_Network()
     photo_object = Photo()
-
-    if request.method == 'GET':
-        patients = get_patients_list(Patient.objects.all().order_by('last_name'))
-        return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
     if request.method == 'POST':
         if act == 'save':
@@ -420,7 +418,7 @@ def load_image(request):
             patient.save()
             photo_object.save_photo(patient, file_url)
 
-            return JsonResponse({'message': ''})
+            return JsonResponse({'message': 'Данные сохранены'})
         else:
             img = request.FILES['file']
             fs, filename, file_url = save_file(img)
@@ -435,7 +433,7 @@ def load_image(request):
 
             return JsonResponse({'result': result})
 
-    return JsonResponse({})
+    return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
 
 @api_view(['POST'])
@@ -448,7 +446,6 @@ def user_logout(request):
 
 # 2. load image
 #   - отображение фото на экране
-#   - (дополнительно) поиск по пациентам для ускорения добавления пациента
 
 # 3. выход logout
 #   - запрет возврата назад
