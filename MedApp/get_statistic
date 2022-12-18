@@ -1,0 +1,48 @@
+train_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
+    directory='D:/Desktop/Диплом/.../train', #t o d o
+    target_size=(224, 224),
+    color_mode="grayscale",
+    batch_size=32,
+    class_mode="categorical",
+    shuffle=True, seed=42)
+
+test_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
+    directory='D:/Desktop/Диплом/Datasets/dataset/test_1000',
+    target_size=(224, 224),
+    color_mode="grayscale",
+    batch_size=1,
+    class_mode=None,
+    shuffle=False,
+    seed=42)
+
+class Neural_Network():
+    def get_statistic(self):  # result = 79,7%
+        # Predict Output
+        STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
+        test_generator.reset()
+        pred = model.predict(test_generator,
+                             steps=STEP_SIZE_TEST,
+                             verbose=1)
+
+        predicted_class_indices = np.argmax(pred, axis=1)
+
+        labels = (train_generator.class_indices)
+        labels = dict((v, k) for k, v in labels.items())
+        predictions = [labels[k] for k in predicted_class_indices]
+
+        current_idx = 0
+        count_accurate = 0
+        Actual = []
+        for i in predictions:
+            string = test_generator.filenames[current_idx]
+            substr = '\\'
+            actual = string[:string.find(substr)]
+            Actual.append(actual)
+            pred = predictions[current_idx]
+            if actual == pred:
+                count_accurate += 1
+            current_idx += 1
+        acc = count_accurate / STEP_SIZE_TEST
+        print(f"The accuracy on predicted the test images is {round(acc * 100, 2)}%.")
+
+# labels = (train_generator.class_indices)   # если надо пользовательские компоненты (если видов изо больше/меньше 4)

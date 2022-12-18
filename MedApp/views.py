@@ -1,3 +1,5 @@
+import os
+
 from PIL import Image
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
@@ -374,11 +376,7 @@ def define_role(role):
     return switcher.get(role)
 
 
-def save_file(file):
-    fs = FileSystemStorage(location='D:/Desktop/Диплом/django+angular/med_site_django/MedApp/temp_storage')
-    filename = fs.save(file.name, file)
-    file_url = fs.path(filename)
-    return fs, filename, file_url
+
 
 
 ###################### old version ######################
@@ -389,13 +387,19 @@ def patients_info(request, pat):
     patient_transfer = PatientDTO(patient, patients_doctor)
 
     if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'image': ''}, safe=False)
 
     # загрузить изображение todo ?
     if request.method == 'POST':  # PUT
         # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
 
+
+def save_file(file):
+    fs = FileSystemStorage(location=os.getcwd() + '/temp_storage/')
+    filename = fs.save(file.name, file)
+    file_url = fs.path(filename)
+    return fs, filename, file_url
 
 @permission_classes([IsAuthenticated, ])
 @api_view(['GET', 'POST'])
@@ -407,16 +411,20 @@ def load_image(request):
     photo_object = Photo()
 
     if request.method == 'POST':
+        img = request.FILES['file']
+        fs, filename, file_url = save_file(img)     # сохранение дикома
+
+        try:
+            final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
+        except Exception:
+            return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+
+        final_image.save(jpg_path)  # сохранение изо
+        fs.delete(filename)         # удаление дикома
+
         if act == 'save':
-            file = request.FILES['file']
             diagnosys = request.POST.get('diagnosys')
             patient_id = request.POST.get('pat_id')
-
-            fs, filename, file_url = save_file(file)
-            final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
-            fs.delete(filename)
-
-            final_image.save(jpg_path)
 
             patient = Patient.objects.get(pk=patient_id)
             patient.diagnosys = diagnosys
@@ -426,18 +434,9 @@ def load_image(request):
 
             return JsonResponse({'message': 'Данные сохранены'})
         else:
-            img = request.FILES['file']
-            fs, filename, file_url = save_file(img)
-
-            # todo временная мера: если файл вдруг не диком, то обрабатывается jpeg
-            try:
-                result = processing.process(file_url, filename)
-            except Exception:
-                result = processing.predict_image(file_url)
-
-            fs.delete(filename)
-
-            return JsonResponse({'result': result})
+            result = processing.predict_image(jpg_path)
+            os.remove(jpg_path)
+            return JsonResponse({'message': result})
 
     return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
@@ -447,18 +446,19 @@ def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
-# ПОДУМАТЬ!!!
-# patient info - ПРЕОБРАЗОВАНИЕ ПЕРЕД КАЖДОЙ ВЫГРУЗКОЙ ИЛИ ПРОЩЕ ХРАНИТЬ JPEG? выгрузить преобразованное фото на экран.
 # 1. load image
 #   - отображение фото на экране
 
-# 2. удалить _все_ фото одного пациента - кнопка в профиле пациента
+# 2. отображать в ангуляре процесс загрузки и обработки изображения чтобы пользователь не нервничал
 
 # 3. выход logout
-#   - запрет возврата назад
-#   - наведение мыши
+#   - запрет возврата назад (см вк)
 
 # 4. сделать кнопку преобразования в диком и сохранения где-нибудь. по сути - кнопку скачивания,
 # в которой преобразуется jpeg в диком
 
-# ------после завершения проверять код на грамотность и вносить исправления ------ #
+
+# todo вопросы
+# 1. нормально что я сама создала нужные мне диком-файлы?
+# 2. хранить на сервере дикомы, или лучше оставлять jpeg, а при выгрузке файла - преобразовывать обратно в диком?
+# 3. Оставлять ли неактуальные фото в хранилище (возможно, не стоит?)
