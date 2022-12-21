@@ -11,8 +11,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import *
 from MedApp.models import Doctor, Patient, Photo
-from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO
-from MedApp.neural_network import Neural_Network
+from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
+from MedApp.neural_network import Neural_Network, save_file
 
 
 @permission_classes([IsAuthenticated, ])
@@ -380,26 +380,30 @@ def define_role(role):
 
 
 ###################### old version ######################
+
 @api_view(['GET', 'POST'])
 def patients_info(request, pat):
     patient = Patient.objects.get(pk=pat)
     patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+    # todo if there is no photo in database 2
+    try:
+        photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
+    except Exception:
+        photo = Photo()
+
+    photo_transfer = PhotoDTO(photo)
     patient_transfer = PatientDTO(patient, patients_doctor)
 
     if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'image': ''}, safe=False)
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer)}, safe=False)
 
-    # загрузить изображение todo ?
+    # загрузить изображение todo ? или только в обработчике (лучше даже)
     if request.method == 'POST':  # PUT
         # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
         return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
 
+# возможно изменить/перенести в другой класс
 
-def save_file(file):
-    fs = FileSystemStorage(location=os.getcwd() + '/temp_storage/')
-    filename = fs.save(file.name, file)
-    file_url = fs.path(filename)
-    return fs, filename, file_url
 
 @permission_classes([IsAuthenticated, ])
 @api_view(['GET', 'POST'])
@@ -430,7 +434,7 @@ def load_image(request):
             patient.diagnosys = diagnosys
 
             patient.save()
-            photo_object.save_photo(patient, file_url)
+            photo_object.save_photo(patient, file_url) #todo with .jpg
 
             return JsonResponse({'message': 'Данные сохранены'})
         else:

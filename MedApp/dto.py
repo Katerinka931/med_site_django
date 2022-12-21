@@ -48,3 +48,13 @@ class PatientDTO(object):
             'last_name': doctor.last_name,
             'middle_name': doctor.middle_name
         }
+
+class PhotoDTO(object):
+    def __init__(self, photo: Photo):
+        self.id = photo.id
+        self.actual = photo.actual
+        self.number_of_instance = photo.number_of_instance
+        self.patient = photo.patient_number_id
+        self.photo = photo.photo
+
+

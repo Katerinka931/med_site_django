@@ -2,15 +2,23 @@ import os
 
 import numpy as np
 import pandas as pd
+from django.core.files.storage import FileSystemStorage
 from keras_preprocessing import image
 from tensorflow import keras
 import pydicom as dicom
 import pydicom.uid
 from PIL import Image
 
+storage_path = os.getcwd() + '/temp_storage/'
+
 model = keras.models.load_model(os.getcwd() + "/KerasModel", custom_objects=None,
                                 compile=True,
                                 options=None)
+def save_file(file):
+    fs = FileSystemStorage(location=storage_path)
+    filename = fs.save(file.name, file)
+    file_url = fs.path(filename)
+    return fs, filename, file_url
 
 class Neural_Network():
     def dicom_to_jpg(self, image_path, img_name):
@@ -23,7 +31,7 @@ class Neural_Network():
         scaled_image = np.uint8(scaled_image)
         final_image = Image.fromarray(scaled_image)
 
-        jpg_path = os.getcwd() + '/temp_storage/' + img_name + '.jpeg'
+        jpg_path = storage_path + img_name + '.jpeg'
         return final_image, jpg_path
 
     def jpg_to_dicom(self, path, img_name, dcm_name):
