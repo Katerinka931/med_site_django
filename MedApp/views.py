@@ -1,10 +1,8 @@
 import os
 
-from PIL import Image
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
-from django.core.files.storage import FileSystemStorage
 from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -241,7 +239,6 @@ def create_patient(request):
                 return JsonResponse({'message': 'Некорректный ввод номера телефона'},
                                     status=status.HTTP_409_CONFLICT)
             date_of_birth = data['date_of_birth']
-            diagnosys = data['diagnosys']
             if Doctor.objects.get(pk=pk).role == 'DOCTOR':
                 doctor_number = pk
             else:
@@ -254,8 +251,7 @@ def create_patient(request):
             return JsonResponse(
                 {'message': 'Пациент с таким адресом электронной почты уже существует'}, safe=False)
         else:
-            patient.create_patient(last_name, first_name, middle_name, email, phone, date_of_birth, doctor_number,
-                                   diagnosys)
+            patient.create_patient(last_name, first_name, middle_name, email, phone, date_of_birth, doctor_number)
             return JsonResponse({'message': 'Пациент успешно создан'}, safe=False)
 
 
@@ -268,29 +264,38 @@ def edit_patient(request, pat):
     doctors = get_doctors_list(
         Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
 
+    try:
+        photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
+        file = photo.convert_image(photo.photo)
+        photo_transfer = PhotoDTO(photo, file)
+    except Exception:
+        photo_transfer = "Изображение еще не загружено"
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': photo_transfer},
+                            safe=False)
+
     if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'doctors': doctors}, safe=False)
+        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer), 'doctors': doctors}, safe=False)
 
     if request.method == 'PUT':
         try:
             data = JSONParser().parse(request)
-            lastname = data['last_name']
-            firstname = data['first_name']
-            middlename = data['middle_name']
-            email = data['email']
-            phone = data['phone']
+            lastname = data['patient']['last_name']
+            firstname = data['patient']['first_name']
+            middlename = data['patient']['middle_name']
+            email = data['patient']['email']
+            phone = data['patient']['phone']
             try:
                 int(phone)
             except ValueError:
                 return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
 
-            date_of_birth = data['date_of_birth']
+            date_of_birth = data['patient']['date_of_birth']
             diagnosys = data['diagnosys']
 
             if Doctor.objects.get(pk=pk).role == 'DOCTOR':
                 doctor_number = pk
             else:
-                doctor_number = data['doctor_number']
+                doctor_number = data['patient']['doctor_number']
         except Exception:
             return JsonResponse({'message': 'Все поля должны быть заполнены'},
                                 status=status.HTTP_409_CONFLICT)
@@ -301,16 +306,93 @@ def edit_patient(request, pat):
                 status=status.HTTP_409_CONFLICT)
         else:
             try:
-                patient.create_patient(lastname, firstname, middlename, email, phone, date_of_birth, doctor_number,
-                                       diagnosys)
+                patient.create_patient(lastname, firstname, middlename, email, phone, date_of_birth, doctor_number)
+                photo.diagnosys = diagnosys
+                photo.save()
                 return JsonResponse({'message': 'Редактирование успешно'}, safe=False)
             except Exception:
                 return JsonResponse({'message': 'Неверно введена дата рождения'}, safe=False,
                                     status=status.HTTP_409_CONFLICT)
 
 
-# todo set here patients_info
-# todo set here load_image
+def get_photos_list(photo_queryset):
+    photos = list()
+    for photo in photo_queryset:
+        file = photo.convert_image(photo.photo)
+        photos.append({'id': photo.pk, 'photo': file, 'diagnosys': photo.diagnosys})
+    return photos
+
+
+@api_view(['GET', 'POST'])
+def patients_info(request, pat):
+    patient = Patient.objects.get(pk=pat)
+    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+    if request.method == 'GET':
+        photos_request = request.GET.get("photo")
+        if photos_request == '1':
+            photo_objects = Photo.objects.filter(patient_number_id=pat)  # .order_by('') по дате создания
+            photos = get_photos_list(photo_objects)
+            return JsonResponse({'message': '', 'photos': photos},
+                                safe=False)
+        else:
+            patient_transfer = PatientDTO(patient, patients_doctor)
+            try:
+                photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
+                file = photo.convert_image(photo.photo)
+                photo_transfer = PhotoDTO(photo, file)
+                return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer)},
+                                    safe=False)
+            except Exception:
+                photo_transfer = "Изображение еще не загружено"
+                return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': photo_transfer},
+                                    safe=False)
+
+
+@permission_classes([IsAuthenticated, ])
+@api_view(['GET', 'POST'])
+def load_image(request):
+    act = request.GET.get('act')
+    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+
+    processing = Neural_Network()
+    photo_object = Photo()
+
+    if request.method == 'POST':
+        img = request.FILES['file']
+        fs, filename, file_url = save_file(img)  # сохранение дикома
+
+        try:
+            final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
+        except Exception:
+            return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+
+        final_image.save(jpg_path)  # сохранение изо
+        fs.delete(filename)  # удаление дикома
+
+        if act == 'save':
+            custom_diagnosys = request.POST.get('custom_diagnosys')
+            diagnosys = request.POST.get('diagnosys')
+            if custom_diagnosys != None:
+                diagnosys += '. ' + custom_diagnosys
+            patient_id = request.POST.get('pat_id')
+
+            patient = Patient.objects.get(pk=patient_id)
+            patient.diagnosys = diagnosys
+
+            try:
+                photo_object.save_photo(patient, file_url, diagnosys)
+                patient.save()
+            except Exception:
+                return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных'})
+
+            return JsonResponse({'message': 'Данные сохранены'})
+        else:
+            result = processing.predict_image(jpg_path)
+            file = photo_object.convert_image(jpg_path)
+            os.remove(jpg_path)
+            return JsonResponse({'message': result, 'file': file})
+
+    return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
 
 # ----------------------- new additional functions -----------------------#
@@ -319,7 +401,7 @@ def get_patients_list(patients_queryset):
     for patient in patients_queryset:
         patients.append({'id': patient.pk, 'first_name': patient.first_name, 'last_name': patient.last_name,
                          'middle_name': patient.middle_name, 'date_of_birth': patient.date_of_birth,
-                         'email': patient.email, 'phone': patient.phone, 'diagnosys': patient.diagnosys})
+                         'email': patient.email, 'phone': patient.phone})
     return patients
 
 
@@ -376,92 +458,31 @@ def define_role(role):
     return switcher.get(role)
 
 
-
-
-
-###################### old version ######################
-
-@api_view(['GET', 'POST'])
-def patients_info(request, pat):
-    patient = Patient.objects.get(pk=pat)
-    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
-    # todo if there is no photo in database 2
-    try:
-        photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
-    except Exception:
-        photo = Photo()
-
-    photo_transfer = PhotoDTO(photo)
-    patient_transfer = PatientDTO(patient, patients_doctor)
-
-    if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer)}, safe=False)
-
-    # загрузить изображение todo ? или только в обработчике (лучше даже)
-    if request.method == 'POST':  # PUT
-        # изменить фото! как - понятия не имею. передавать в качестве параметра фото? путь к фото? что вообще ... помогите...
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer)}, safe=False)  # this delete maybe
-
-# возможно изменить/перенести в другой класс
-
-
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'POST'])
-def load_image(request):
-    act = request.GET.get('act')
-    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
-
-    processing = Neural_Network()
-    photo_object = Photo()
-
-    if request.method == 'POST':
-        img = request.FILES['file']
-        fs, filename, file_url = save_file(img)     # сохранение дикома
-
-        try:
-            final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
-        except Exception:
-            return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
-
-        final_image.save(jpg_path)  # сохранение изо
-        fs.delete(filename)         # удаление дикома
-
-        if act == 'save':
-            diagnosys = request.POST.get('diagnosys')
-            patient_id = request.POST.get('pat_id')
-
-            patient = Patient.objects.get(pk=patient_id)
-            patient.diagnosys = diagnosys
-
-            patient.save()
-            photo_object.save_photo(patient, file_url) #todo with .jpg
-
-            return JsonResponse({'message': 'Данные сохранены'})
-        else:
-            result = processing.predict_image(jpg_path)
-            os.remove(jpg_path)
-            return JsonResponse({'message': result})
-
-    return JsonResponse({'message': '', 'patients': patients}, safe=False)
-
-
 @api_view(['POST'])
 def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
-# 1. load image
-#   - отображение фото на экране
+# todo all desires
 
-# 2. отображать в ангуляре процесс загрузки и обработки изображения чтобы пользователь не нервничал
+# todo исправлять! диагноз теперь относится к конкретной фотографии!
 
-# 3. выход logout
-#   - запрет возврата назад (см вк)
+#  1. История фотографий.
+#       1) указание даты создания файла (dicom) !!
 
-# 4. сделать кнопку преобразования в диком и сохранения где-нибудь. по сути - кнопку скачивания,
-# в которой преобразуется jpeg в диком
+#   2) удаление инстанса фото
+#  при удалении фото настроить внешний вид данных
 
-# 5. у пациента просматривать историю фотографий (то есть просматривать все фото, даже неактуальные) - все фото с указанием даты, когда оно было сделано,
-#    и диагноза, который был получен в результате обработки
-#    получается, в бд нужно еще сохранить дату создания файла, чтобы по ней сортировать
+
+#  2. отображать в ангуляре процесс загрузки и обработки изображения чтобы пользователь не нервничал
+
+#  3. выход logout
+#    - запрет возврата назад (см вк)
+
+#  4. сделать кнопку преобразования в диком и сохранения где-нибудь. по сути - кнопку скачивания,
+#  в которой преобразуется jpeg в диком
+
+#  5. масштабирование изучить и сделать
+
+# оператор не должен просматривать диагнозы, только персональные данные
 

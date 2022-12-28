@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-
+import base64
 
 class Doctor(models.Model):
     role = models.CharField(max_length=100)
@@ -49,9 +49,7 @@ class Patient(models.Model):
     email = models.EmailField(max_length=100, null=True)
     phone = models.CharField(max_length=20, null=True)
 
-    diagnosys = models.CharField(max_length=10000, null=True)
-
-    def create_patient(self, lastname, firstname, middlename, email, phone, date, doctor_number, diagnosys):
+    def create_patient(self, lastname, firstname, middlename, email, phone, date, doctor_number):
         if self.id == None:
             patient = Patient()
         else:
@@ -64,7 +62,6 @@ class Patient(models.Model):
         patient.phone = phone
         patient.date_of_birth = date
         patient.doctor_number_id = doctor_number
-        patient.diagnosys = diagnosys
         patient.save()
 
     def remove_patient(self, id):
@@ -73,18 +70,26 @@ class Patient(models.Model):
 
 class Photo(models.Model):
     patient_number = models.ForeignKey(Patient, on_delete=models.CASCADE, blank=True)
-    photo = models.CharField(max_length=100)
-    number_of_instance = models.CharField(max_length=10)
+    photo = models.CharField(max_length=100, unique=True)
     actual = models.CharField(max_length=5)
+    diagnosys = models.CharField(max_length=10000, null=True)
+    date_of_creation = models.DateField(null=True)
 
-    def save_photo(self, patient, loaded_file):
+    # еще одно поле в бд для сохранения пути к дикому? возможно стоит!
+
+    def save_photo(self, patient, loaded_file, diagnosys):
         photo = Photo()
-        photo.photo = loaded_file
+        photo.photo = loaded_file + '.jpeg'
 
-        # делаем все предыдущие неактуальными
-        Photo.objects.filter(patient_number_id=patient.pk).update(actual=0)
-        # todo удалять неактуальные фото? или оставлять для истории?
-
+        Photo.objects.filter(patient_number_id=patient.pk).update(actual=0) # делаем все предыдущие неактуальными
+        photo.diagnosys = diagnosys
         photo.actual = 1
         photo.patient_number = patient
         photo.save()
+
+    def convert_image(self, jpg_path):
+        with open(jpg_path, "rb") as image:
+            f = image.read()
+            b = bytearray(f)
+        b64 = base64.b64encode(b)
+        return b64.decode('utf-8')

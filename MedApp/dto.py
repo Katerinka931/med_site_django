@@ -37,7 +37,6 @@ class PatientDTO(object):
         self.date_of_birth = patient.date_of_birth
         self.email = patient.email
         self.phone = patient.phone
-        self.diagnosys = patient.diagnosys
         self.doctor = {
             'id': doctor.id,
             'role': doctor.role,
@@ -50,11 +49,11 @@ class PatientDTO(object):
         }
 
 class PhotoDTO(object):
-    def __init__(self, photo: Photo):
+    def __init__(self, photo: Photo, file):
         self.id = photo.id
         self.actual = photo.actual
-        self.number_of_instance = photo.number_of_instance
+        self.diagnosys = photo.diagnosys
         self.patient = photo.patient_number_id
-        self.photo = photo.photo
+        self.photo = file
 
 
