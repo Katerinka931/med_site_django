@@ -1,31 +1,33 @@
 import os
+from datetime import datetime
 
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.http import JsonResponse
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.parsers import JSONParser
-from rest_framework.permissions import *
+from rest_framework.views import APIView
+
 from MedApp.models import Doctor, Patient, Photo
 from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
 from MedApp.neural_network import Neural_Network, save_file
 
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'DELETE'])
-def main(request):
-    pk = request.user.id
-    remove_id = request.GET.get("remove")
-
-    user = Doctor.objects.get(pk=pk)
-    people = get_list_of_people(pk, user.role)
-
-    if request.method == 'GET':
+class MainListClass(APIView):
+    def get(self, request):
+        pk = request.user.id
+        user = Doctor.objects.get(pk=pk)
+        people = get_list_of_people(pk, user.role)
         return JsonResponse({'message': 'Список', 'people': people}, safe=False)
 
-    if request.method == 'DELETE':
+    def delete(self, request):
+        pk = request.user.id
+        user = Doctor.objects.get(pk=pk)
+        people = get_list_of_people(pk, user.role)
+        remove_id = request.GET.get("remove")
+
         if remove_id != None:
             remove_person(remove_id, user.role, 'user')
             people = get_list_of_people(pk, user.role)
@@ -37,32 +39,32 @@ def main(request):
                 status=status.HTTP_204_NO_CONTENT)
 
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'DELETE'])
-def patients_list(request):
-    pk = request.user.id
-    doctor = Doctor.objects.get(id=pk)
+class PatientsListClass(APIView):
+    def get(self, request):
+        patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+        return JsonResponse({'message': '', 'people': patients}, safe=False)
 
-    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
-    remove_id = request.GET.get("remove")
-
-    if request.method == 'DELETE':
+    def delete(self, request):
+        pk = request.user.id
+        doctor = Doctor.objects.get(id=pk)
+        remove_id = request.GET.get("remove")
         if remove_id != None:
             remove_person(remove_id, doctor.role, 'pat')
             return JsonResponse({'message': 'Удаление успешно'}, safe=False)
 
-    if request.method == 'GET':
-        return JsonResponse({'message': '', 'people': patients}, safe=False)
 
+class ProfileClass(APIView):
+    def get(self, request):
+        pk = request.user.id
+        user = Doctor.objects.get(pk=pk)
+        transfer_object = DoctorDTO(user)
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'POST', 'PUT'])
-def profile(request):
-    pk = request.user.id
-    user = Doctor.objects.get(pk=pk)
-    transfer_object = DoctorDTO(user)
+        return JsonResponse({'user': vars(transfer_object)}, safe=False)
 
-    if request.method == 'POST':
+    def post(self, request):
+        pk = request.user.id
+        user = Doctor.objects.get(pk=pk)
+
         data = JSONParser().parse(request)
         password = data['password']
         new_password = data['new_password']
@@ -82,7 +84,11 @@ def profile(request):
         else:
             return JsonResponse({'message': 'Неверно введен старый пароль'}, status=status.HTTP_409_CONFLICT)
 
-    if request.method == 'PUT':
+    def put(self, request):
+        pk = request.user.id
+        user = Doctor.objects.get(pk=pk)
+        transfer_object = DoctorDTO(user)
+
         data = JSONParser().parse(request)
         lastname = data['last_name']
         firstname = data['first_name']
@@ -105,17 +111,14 @@ def profile(request):
                 return JsonResponse({'message': 'Редактирование успешно', 'user': vars(transfer_object)},
                                     safe=False)
 
-    if request.method == 'GET':
-        return JsonResponse({'user': vars(transfer_object)}, safe=False)
 
+class CreateUserClass(APIView):
+    def get(self, request):
+        JsonResponse({'message': ''}, safe=False)
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'POST'])
-def create_user(request):
-    data = JSONParser().parse(request)
-    doc = Doctor()
-
-    if request.method == 'POST':
+    def post(self, request):
+        data = JSONParser().parse(request)
+        doc = Doctor()
         try:
             role = define_role(data['role'].lower())
             last_name = data['last_name']
@@ -153,19 +156,15 @@ def create_user(request):
             return JsonResponse({'message': 'Пароли не совпадают'},
                                 status=status.HTTP_403_FORBIDDEN)
 
-    return JsonResponse({'message': ''}, safe=False)
 
-
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'PUT'])
-def edit_user(request, usr):
-    doctor = Doctor.objects.get(id=usr)
-    transfer_object = DoctorDTO(doctor)
-
-    if request.method == 'GET':
+class EditUserClass(APIView):
+    def get(self, request, usr):
+        doctor = Doctor.objects.get(id=usr)
+        transfer_object = DoctorDTO(doctor)
         return JsonResponse({'user': vars(transfer_object)})
 
-    if request.method == 'PUT':
+    def put(self, request, usr):
+        doctor = Doctor.objects.get(id=usr)
         data = JSONParser().parse(request)
         role = define_role(data['role'].lower())
         lastname = data['last_name']
@@ -193,19 +192,18 @@ def edit_user(request, usr):
                     safe=False, status=status.HTTP_409_CONFLICT)
 
 
-@api_view(['GET', 'DELETE'])
-def doctors_info(request, usr):
-    remove_id = request.GET.get("remove")
-    doctor = Doctor.objects.get(pk=usr)
-
-    if request.method == 'GET':
+class DoctorsInfoClass(APIView):
+    def get(self, request, usr):
+        doctor = Doctor.objects.get(pk=usr)
         patients = get_patients(doctor)
         doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
 
         return JsonResponse(
             {'user': vars(doctor_transfer_object)}, safe=False)
 
-    if request.method == 'DELETE':
+    def delete(self, request, usr):
+        remove_id = request.GET.get("remove")
+        doctor = Doctor.objects.get(pk=usr)
         if remove_id != None:
             remove_person(remove_id, doctor.role, 'pat')
 
@@ -214,18 +212,15 @@ def doctors_info(request, usr):
             return JsonResponse({'message': 'Удаление успешно', 'user': vars(doctor_transfer_object)}, safe=False)
 
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'POST'])
-def create_patient(request):
-    pk = request.user.id
-    patient = Patient()
-
-    if request.method == 'GET':
+class CreatePatientClass(APIView):
+    def get(self, request):
         doctors = get_doctors_list(
             Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
         return JsonResponse({'message': '', 'doctors': doctors}, safe=False)
 
-    if request.method == 'POST':
+    def post(self, request):
+        pk = request.user.id
+        patient = Patient()
         try:
             data = JSONParser().parse(request)
             last_name = data['last_name']
@@ -255,28 +250,36 @@ def create_patient(request):
             return JsonResponse({'message': 'Пациент успешно создан'}, safe=False)
 
 
-@api_view(['GET', 'PUT'])
-def edit_patient(request, pat):
-    pk = request.user.id
-    patient = Patient.objects.get(pk=pat)
-    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
-    patient_transfer = PatientDTO(patient, patients_doctor)
-    doctors = get_doctors_list(
-        Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
+class EditPatientClass(APIView):
+    def get(self, request, pat):
+        patient = Patient.objects.get(pk=pat)
+        patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+        patient_transfer = PatientDTO(patient, patients_doctor)
+        doctors = get_doctors_list(
+            Doctor.objects.all().exclude(role='ADMIN').exclude(role='OPERATOR').order_by('last_name'))
 
-    try:
-        photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
-        file = photo.convert_image(photo.photo)
-        photo_transfer = PhotoDTO(photo, file)
-    except Exception:
-        photo_transfer = "Изображение еще не загружено"
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': photo_transfer},
-                            safe=False)
+        try:
+            photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
+            file = photo.convert_image(photo.photo)
+            photo_transfer = PhotoDTO(photo, file)
+        except Exception:
+            photo_transfer = "Изображение еще не загружено"  # todo another response delete photo?
+            return JsonResponse(
+                {'message': '', 'patient': vars(patient_transfer), 'photo': photo_transfer, 'doctors': doctors},
+                safe=False)
 
-    if request.method == 'GET':
-        return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer), 'doctors': doctors}, safe=False)
+        return JsonResponse(
+            {'message': '', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer), 'doctors': doctors},
+            safe=False)
 
-    if request.method == 'PUT':
+    def put(self, request, pat):
+        pk = request.user.id
+        patient = Patient.objects.get(pk=pat)
+        try:
+            photo = Photo.objects.filter(patient_number_id=pat).get(actual=1)
+        except Exception:
+            photo = Photo()
+
         try:
             data = JSONParser().parse(request)
             lastname = data['patient']['last_name']
@@ -315,22 +318,15 @@ def edit_patient(request, pat):
                                     status=status.HTTP_409_CONFLICT)
 
 
-def get_photos_list(photo_queryset):
-    photos = list()
-    for photo in photo_queryset:
-        file = photo.convert_image(photo.photo)
-        photos.append({'id': photo.pk, 'photo': file, 'diagnosys': photo.diagnosys})
-    return photos
+class PatientsInfoClass(APIView):
+    def get(self, request, pat):
+        patient = Patient.objects.get(pk=pat)
+        patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
 
-
-@api_view(['GET', 'POST'])
-def patients_info(request, pat):
-    patient = Patient.objects.get(pk=pat)
-    patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
-    if request.method == 'GET':
         photos_request = request.GET.get("photo")
+        photo_objects = Photo.objects.filter(patient_number_id=pat)
         if photos_request == '1':
-            photo_objects = Photo.objects.filter(patient_number_id=pat)  # .order_by('') по дате создания
+
             photos = get_photos_list(photo_objects)
             return JsonResponse({'message': '', 'photos': photos},
                                 safe=False)
@@ -347,19 +343,35 @@ def patients_info(request, pat):
                 return JsonResponse({'message': '', 'patient': vars(patient_transfer), 'photo': photo_transfer},
                                     safe=False)
 
+    def delete(self, request, pat):
+        photo_id = request.GET.get('id')
+        photo_objects = Photo.objects.filter(patient_number_id=pat)
+        deleted_photo = photo_objects.get(pk=photo_id)
+        path = deleted_photo.photo
+        deleted_photo.delete()
+        os.remove(path)
 
-@permission_classes([IsAuthenticated, ])
-@api_view(['GET', 'POST'])
-def load_image(request):
-    act = request.GET.get('act')
-    patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+        list_of_photos = get_photos_list(photo_objects)
+        if len(list_of_photos) > 0:
+            new_actual_photo_id = list_of_photos[0]['id']
+            Photo.objects.filter(pk=new_actual_photo_id).update(actual=1)
 
-    processing = Neural_Network()
-    photo_object = Photo()
+        return JsonResponse({'message': 'Фото удалено'}, safe=False)
 
-    if request.method == 'POST':
+
+class LoadImageClass(APIView):
+    def get(self, request):
+        patients = get_patients_list(Patient.objects.all().order_by('last_name'))
+        return JsonResponse({'message': '', 'patients': patients}, safe=False)
+
+    def post(self, request):
+        act = request.GET.get('act')
+        processing = Neural_Network()
+        photo_object = Photo()
         img = request.FILES['file']
         fs, filename, file_url = save_file(img)  # сохранение дикома
+
+        date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
 
         try:
             final_image, jpg_path = processing.dicom_to_jpg(file_url, filename)
@@ -367,23 +379,41 @@ def load_image(request):
             return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
 
         final_image.save(jpg_path)  # сохранение изо
-        fs.delete(filename)  # удаление дикома
+        fs.delete(filename)  # удаление дикома ?????????????????????????????????
 
         if act == 'save':
             custom_diagnosys = request.POST.get('custom_diagnosys')
             diagnosys = request.POST.get('diagnosys')
+
             if custom_diagnosys != None:
                 diagnosys += '. ' + custom_diagnosys
+
             patient_id = request.POST.get('pat_id')
-
             patient = Patient.objects.get(pk=patient_id)
-            patient.diagnosys = diagnosys
 
+            # проверка точно ли фото является более актуальным (проверка по дате)
             try:
-                photo_object.save_photo(patient, file_url, diagnosys)
-                patient.save()
+                current_photo = Photo.objects.filter(patient_number_id=patient_id).get(actual=1)
+                if (current_photo.date_of_creation.timestamp() > date.timestamp()):
+                    return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'})
+                else:
+                    # ОДИНАКОВЫЙ КОД !!!
+                    try:
+                        photo_object.save_photo(patient, file_url, diagnosys, date)
+                        patient.save()
+                    except Exception:
+                        os.remove(jpg_path)
+                        return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '})
+                    # ОДИНАКОВЫЙ КОД !!!
             except Exception:
-                return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных'})
+                # ОДИНАКОВЫЙ КОД !!!
+                try:
+                    photo_object.save_photo(patient, file_url, diagnosys, date)
+                    patient.save()
+                except Exception:
+                    os.remove(jpg_path)
+                    return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '})
+                # ОДИНАКОВЫЙ КОД !!!
 
             return JsonResponse({'message': 'Данные сохранены'})
         else:
@@ -392,10 +422,8 @@ def load_image(request):
             os.remove(jpg_path)
             return JsonResponse({'message': result, 'file': file})
 
-    return JsonResponse({'message': '', 'patients': patients}, safe=False)
 
-
-# ----------------------- new additional functions -----------------------#
+# ----------------------- additional functions -----------------------#
 def get_patients_list(patients_queryset):
     patients = list()
     for patient in patients_queryset:
@@ -425,6 +453,20 @@ def get_list_of_people(pk, user_role):
     else:
         people = get_patients_list(Patient.objects.filter(doctor_number_id=pk).order_by('last_name'))
     return people
+
+
+def convert_data_custom(date):
+    converted_date = date.strftime('%d.%m.%Y, %H:%M:%S')
+    return converted_date
+
+
+def get_photos_list(photo_queryset):
+    photos = list()
+    for photo in photo_queryset:
+        file = photo.convert_image(photo.photo)
+        photos.append({'id': photo.pk, 'photo': file, 'diagnosys': photo.diagnosys,
+                       'date': convert_data_custom(photo.date_of_creation)})
+    return photos
 
 
 def get_patients(doctor):
@@ -462,27 +504,3 @@ def define_role(role):
 def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
-
-# todo all desires
-
-# todo исправлять! диагноз теперь относится к конкретной фотографии!
-
-#  1. История фотографий.
-#       1) указание даты создания файла (dicom) !!
-
-#   2) удаление инстанса фото
-#  при удалении фото настроить внешний вид данных
-
-
-#  2. отображать в ангуляре процесс загрузки и обработки изображения чтобы пользователь не нервничал
-
-#  3. выход logout
-#    - запрет возврата назад (см вк)
-
-#  4. сделать кнопку преобразования в диком и сохранения где-нибудь. по сути - кнопку скачивания,
-#  в которой преобразуется jpeg в диком
-
-#  5. масштабирование изучить и сделать
-
-# оператор не должен просматривать диагнозы, только персональные данные
-
