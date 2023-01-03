@@ -52,7 +52,7 @@ class PhotoDTO(object):
     def __init__(self, photo: Photo, file):
         self.id = photo.id
         self.actual = photo.actual
-        self.diagnosys = photo.diagnosys
+        self.diagnosis = photo.diagnosis
         self.patient = photo.patient_number_id
         self.photo = file
 

@@ -1,9 +1,11 @@
 import os
+from enum import Enum
 
 import numpy as np
 import pandas as pd
 from django.core.files.storage import FileSystemStorage
-from keras_preprocessing import image
+from keras.api.keras.preprocessing import image
+# from keras_preprocessing import image
 from tensorflow import keras
 import pydicom as dicom
 import pydicom.uid
@@ -19,6 +21,17 @@ def save_file(file):
     filename = fs.save(file.name, file)
     file_url = fs.path(filename)
     return fs, filename, file_url
+
+class Disease(Enum):
+    PNEUMONIA = 'Пневмония'
+    NORMAL = 'Патологий не обнаружено'
+    COVID19 = 'Covid-19'
+    TURBERCULOSIS = 'Туберкулез'
+
+    @classmethod
+    def choices(cls):
+        return [(key.value, key.name) for key in cls]
+
 
 class Neural_Network():
     def dicom_to_jpg(self, image_path, img_name):
@@ -51,17 +64,6 @@ class Neural_Network():
         ds.PixelData = np.array(im.getdata(), dtype=np.uint8).tobytes()
         ds.save_as(dcm_name)
 
-
-    def get_diagnosys(self, prediction):
-        switcher = {
-            "PNEUMONIA": "Пневмония",
-            "NORMAL": "Патологий не обнаружено",
-            "TURBERCULOSIS": "Туберкулез",
-            "COVID19": "Covid-19",
-        }
-        return switcher.get(prediction)
-
-
     def predict_image(self, img_path):
         img = image.load_img(img_path, target_size=(224, 224), grayscale=True)
         img_arr = image.img_to_array(img)
@@ -72,8 +74,7 @@ class Neural_Network():
         labels = {'COVID19': 0, 'NORMAL': 1, 'PNEUMONIA': 2, 'TURBERCULOSIS': 3}
         labels = dict((v, k) for k, v in labels.items())
         predictions = [labels[k] for k in predicted]
-
-        return self.get_diagnosys(predictions[0])
+        return [e.value for e in Disease if e.name == predictions[0]][0]
 
 
     def save_to_file(self, prediction, name_of_file):  # "results.csv"

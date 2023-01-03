@@ -19,6 +19,7 @@ class UserRole(Enum):
     # print([e.value for e in UserRole])
     # print([e.name for e in UserRole])
 
+
 class Doctor(models.Model):
     role = models.CharField(max_length=100)
     login = models.CharField(max_length=150, unique=True)
@@ -80,13 +81,10 @@ class Patient(models.Model):
 
 class Photo(models.Model):
     patient_number = models.ForeignKey(Patient, on_delete=models.CASCADE, blank=True)
-    photo = models.CharField(max_length=100, unique=True)  # null = true!
+    photo = models.CharField(max_length=100, unique=True, null=True)  # null = true!
     actual = models.CharField(max_length=5)
     diagnosis = models.CharField(max_length=10000, null=True)
     date_of_creation = models.DateTimeField(null=True)
-
-    # todo еще одно поле в бд для сохранения пути к дикому? возможно стоит! или называть оба файла одинаково, в бд хранить только имя, а при извлечении сделать метод,
-    #  который получает или диком, или жпег
 
     class Meta:
         ordering = ["patient_number_id", "-date_of_creation"]
@@ -101,17 +99,16 @@ class Photo(models.Model):
         b64 = base64.b64encode(b)
         return b64.decode('utf-8')
 
-    def get_absolute_photo_path(self, name):
-        return os.getcwd() + '/temp_storage/' + name
+    @staticmethod
+    def get_absolute_file_path(name, *ext):
+        path = os.getcwd() + '/temp_storage/' + name
+        return path + ext[0] if len(ext) > 0 else path
 
-
-    # todo change savings as previous classes
-    def save_photo(self, patient, loaded_file, diagnosis, date):
+    def save_photo(self, patient, filename, diagnosis, date):
         photo = Photo()
-        # todo .jpeg?
-        photo.photo = loaded_file + '.jpeg'
+        photo.photo = filename
 
-        Photo.objects.filter(patient_number_id=patient.pk).update(actual=0)  # делаем все предыдущие неактуальными
+        Photo.objects.filter(patient_number_id=patient.pk).update(actual=0)
         photo.diagnosis = diagnosis
         photo.actual = 1
         photo.patient_number = patient

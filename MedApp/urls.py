@@ -8,7 +8,6 @@ from rest_framework_simplejwt.views import token_refresh
 from .CustomTokenSerializer.TokenSerializer import CustomTokenView
 from .views import DoctorsInfoClass, MainListClass, PatientsListClass, ProfileClass, CreateUserClass, EditUserClass, \
     CreatePatientClass, EditPatientClass, PatientsInfoClass
-
 urlpatterns = [
                   re_path(r'^login', CustomTokenView.as_view(), name='token_obtain_pair'),
                   re_path(r'^refresh_token', token_refresh),
@@ -24,9 +23,13 @@ urlpatterns = [
 
                   re_path(r'^create_patient$', CreatePatientClass.as_view(), name='create-patient'),
                   re_path(r'^edit_patient/(?P<pat>\d+)$', EditPatientClass.as_view(), name='edit-patient'),
-                  re_path(r'^patient/(?P<pat>\d+)$', PatientsInfoClass.as_view(), name='patients-data'),
+
+                  re_path(r'^patient/(?P<pat>\d+)$', PatientsInfoClass.as_view({'get': 'get', 'delete': 'delete'}), name='patients-data'),
+                  re_path(r'^patient/(?P<pat>\d+)/history$', PatientsInfoClass.as_view({'get': 'get_photos_history'}), name='patients-data'),
+                  re_path(r'^patient/(?P<pat>\d+)/download/(?P<type>\w+)$', PatientsInfoClass.as_view({'get': 'download'}), name='patients-data'),
 
                   re_path(r'^load_image$', views.LoadImageClass.as_view({'get': 'get', 'post': 'post_predict'}), name='load-image'),
                   re_path(r'^load_image/save$', views.LoadImageClass.as_view({'post': 'post_save'}), name='load-image-save'),
 
               ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
