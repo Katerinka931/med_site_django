@@ -24,8 +24,9 @@ class MainListClass(APIView):
         pk = request.user.id
         user = Doctor.objects.get(pk=pk)
         try:
+            roles = UserRole.choices(UserRole.ADMIN.name)
             people = ListOfObjects.get_list_of_people_to_main_page(pk, user.role)
-            return JsonResponse({'message': 'Список', 'people': people}, status=status.HTTP_200_OK, safe=False)
+            return JsonResponse({'message': 'Список', 'people': people, 'roles': roles}, status=status.HTTP_200_OK, safe=False)
         except Exception:
             message = "Не удалось загрузить докторов, попробуйте еще раз" if user.role == UserRole.ADMIN.name or user.role == UserRole.CHIEF.name else "Не удалось загрузить пациентов, попробуйте еще раз"
             return JsonResponse({'message': message}, status=status.HTTP_404_NOT_FOUND, safe=False)
@@ -212,9 +213,8 @@ class EditUserClass(APIView):
     def get(self, request, usr):
         doctor = Doctor.objects.get(id=usr)
         transfer_object = DoctorDTO(doctor)
-        return JsonResponse(
-            {'user': vars(transfer_object), 'roles': [e.value for e in UserRole if e.name != UserRole.ADMIN.name]},
-            status=status.HTTP_200_OK)
+        roles = UserRole.choices(UserRole.ADMIN.name)
+        return JsonResponse({'user': vars(transfer_object), 'roles': roles}, status=status.HTTP_200_OK)
 
     def put(self, request, usr):
         doctor = Doctor.objects.get(id=usr)
@@ -243,8 +243,8 @@ class DoctorsInfoClass(APIView):
         doctor = Doctor.objects.get(pk=usr)
         patients = ListOfObjects.get_users_patients(doctor)
         doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
-
-        return JsonResponse({'user': vars(doctor_transfer_object)}, status=status.HTTP_200_OK, safe=False)
+        roles = UserRole.choices()
+        return JsonResponse({'user': vars(doctor_transfer_object), 'roles': roles}, status=status.HTTP_200_OK, safe=False)
 
     def delete(self, request, usr):
         remove_id = request.GET.get("remove")
@@ -309,7 +309,7 @@ class CreatePatientClass(APIView):
             return JsonResponse({'message': 'Пациент успешно создан'}, status=status.HTTP_200_OK, safe=False)
 
 
-class EditPatientClass(APIView):
+class EditPatientClass(GenericViewSet):
     permission_classes = [IsAuthenticated]
 
     @staticmethod
@@ -323,6 +323,19 @@ class EditPatientClass(APIView):
         date_of_birth = data['patient']['date_of_birth']
         doc_number = data['patient']['doctor_number']
         return last_name, first_name, middle_name, email, phone, date_of_birth, doc_number
+
+    @staticmethod
+    def get_photo_transfer(filename):
+        file = LoadImageClass.photo_object_var.convert_image(Photo.get_absolute_file_path(filename, '.jpeg'))
+        photo_transfer = PhotoDTO(Photo.objects.get(photo=filename), file)
+        return photo_transfer
+
+    @staticmethod
+    def edit_photo(photo_id, diagnosis):
+        actual_photo = Photo.objects.get(pk=photo_id)
+        actual_photo.diagnosis = diagnosis
+        actual_photo.save()
+        return EditPatientClass.get_photo_transfer(actual_photo.photo)
 
     def get(self, request, pat):
         patient = Patient.objects.get(pk=pat)
@@ -353,13 +366,14 @@ class EditPatientClass(APIView):
     def put(self, request, pat):
         pk = request.user.id
         patient = Patient.objects.get(pk=pat)
-        photos_instances = Photo.objects.filter(patient_number_id=pat)
 
         try:
             lastname, firstname, middle_name, email, phone, date_of_birth, doc_number = EditPatientClass.parse_request(
                 request)
+
             if not CheckingUtils.check_phone(phone):
                 return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
+
             doctor_number = pk if Doctor.objects.get(pk=pk).role == UserRole.DOCTOR.name else doc_number
         except Exception:
             return JsonResponse({'message': 'Все поля должны быть заполнены'}, status=status.HTTP_409_CONFLICT)
@@ -370,21 +384,43 @@ class EditPatientClass(APIView):
         else:
             try:
                 patient.create_patient(lastname, firstname, middle_name, email, phone, date_of_birth, doctor_number)
-                if photos_instances:
-                    photo = photos_instances.get(actual=1)
-                    # diagnosis = JSONParser().parse(request)['diagnosis'] todo получить диагноз и фото (post_save in Load_image)
-                    if True == False:  # another condition
-                        # if photo изменено, то создать новую запись в таблице, иначе только отредактировать диагноз
-                        # photo.save_photo(patient, filename, diagnosis, date)
-                        pass
-                    else:
-                        pass
-                        # photo.diagnosis = diagnosis
-                        # photo.save()
-                return JsonResponse({'message': 'Редактирование успешно'}, status=status.HTTP_200_OK, safe=False)
+                return JsonResponse({'message': 'Редактирование пациента успешно'}, status=status.HTTP_200_OK,
+                                    safe=False)
             except Exception:
                 return JsonResponse({'message': 'Неверно введена дата рождения'}, safe=False,
                                     status=status.HTTP_409_CONFLICT)
+
+    def post_photo_instance(self, request, pat):
+        global ed_file_name
+        diagnosis = request.POST.get('diagnosis')
+        photo_id = request.POST.get('pk')
+
+        if photo_id != '0':
+            photo_transfer = EditPatientClass.edit_photo(photo_id, diagnosis)
+            return JsonResponse({'message': 'Редактирование успешно', 'photo': vars(photo_transfer)},
+                                status=status.HTTP_200_OK)
+        else:
+            date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
+            patient = Patient.objects.get(pk=pat)
+
+            try:
+                ed_file_name = ParsingUtils.parse_and_save_images(request)
+            except ValueError:
+                return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
+                                    status=status.HTTP_409_CONFLICT)
+            except Exception:
+                return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+
+            actual_photo = Photo.objects.filter(patient_number=pat).get(actual=1)
+            if actual_photo.date_of_creation.timestamp() > date.timestamp():
+                ParsingUtils.remove_images(ed_file_name)
+                return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
+                                    status=status.HTTP_409_CONFLICT)
+
+            Photo.create_photo(patient, ed_file_name, diagnosis, date)
+            photo_transfer = EditPatientClass.get_photo_transfer(ed_file_name)
+            return JsonResponse({'message': 'Редактирование успешно', 'photo': vars(photo_transfer)},
+                                status=status.HTTP_200_OK)
 
 
 class PatientsInfoClass(GenericViewSet):
@@ -433,8 +469,7 @@ class PatientsInfoClass(GenericViewSet):
         photo_objects = Photo.objects.filter(patient_number_id=pat)
         deleted_photo = photo_objects.get(pk=photo_id)
         deleted_photo.delete()
-        os.remove(Photo.get_absolute_file_path(deleted_photo.photo, '.jpeg'))
-        os.remove(Photo.get_absolute_file_path(deleted_photo.photo))
+        ParsingUtils.remove_images(deleted_photo.photo)
 
         list_of_photos = ListOfObjects.get_photos_list(photo_objects)
         if len(list_of_photos) > 0:
@@ -461,18 +496,6 @@ class LoadImageClass(GenericViewSet):
         patient_id = request.POST.get('pat_id')
         return diagnosis, patient_id
 
-    @staticmethod
-    def parse_file_data(request):
-        img = request.FILES['file']
-        fs, filename, file_url = save_file(img)  # сохранение dcm
-
-        try:
-            final_image, jpg_path = LoadImageClass.neural_network_instance_var.dicom_to_jpg(file_url, filename)
-        except Exception:
-            raise Exception()
-        final_image.save(jpg_path)  # сохранение jpeg
-        return filename
-
     def get(self, request):
         pk = request.user.id
         user = Doctor.objects.get(pk=pk)
@@ -485,7 +508,11 @@ class LoadImageClass(GenericViewSet):
 
     def post_predict(self, request):
         try:
-            filename = LoadImageClass.parse_file_data(request)
+            filename = ParsingUtils.parse_and_save_images(request)
+        except ValueError:
+            ParsingUtils.remove_images(ed_file_name)
+            return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
+                                status=status.HTTP_409_CONFLICT)
         except Exception:
             return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
 
@@ -497,14 +524,17 @@ class LoadImageClass(GenericViewSet):
         except Exception:
             return JsonResponse({'message': 'Не удалось обработать файл'}, status=status.HTTP_409_CONFLICT)
         finally:
-            os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
-            os.remove(Photo.get_absolute_file_path(filename))
+            ParsingUtils.remove_images(filename)
 
     def post_save(self, request):
         date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
 
         try:
-            filename = LoadImageClass.parse_file_data(request)
+            filename = ParsingUtils.parse_and_save_images(request)
+        except ValueError:
+            ParsingUtils.remove_images(ed_file_name)
+            return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
+                                status=status.HTTP_409_CONFLICT)
         except Exception:
             return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
 
@@ -516,29 +546,49 @@ class LoadImageClass(GenericViewSet):
 
             if photos_instances:
                 current_photo = photos_instances.get(actual=1)
-                if current_photo.date_of_creation.timestamp() > date.timestamp():  # проверка фото по дате (является ли новым)
-                    os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
-                    os.remove(Photo.get_absolute_file_path(filename))
+
+                if current_photo.date_of_creation.timestamp() > date.timestamp():
+                    ParsingUtils.remove_images(filename)
                     return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                         status=status.HTTP_409_CONFLICT)
-            try:
-                print(diagnosis)
-                LoadImageClass.photo_object_var.save_photo(patient, filename, diagnosis, date)
-                patient.save()
-                return JsonResponse({'message': 'Данные сохранены'}, status=status.HTTP_200_OK)
-            except Exception:
-                os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
-                os.remove(Photo.get_absolute_file_path(filename))
-                return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
-                                    status=status.HTTP_409_CONFLICT)
+
+            Photo.create_photo(patient, filename, diagnosis, date)
+            patient.save()
+            return JsonResponse({'message': 'Данные сохранены'}, status=status.HTTP_200_OK)
+
         except Exception:
-            os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
-            os.remove(Photo.get_absolute_file_path(filename))
+            ParsingUtils.remove_images(filename)
             return JsonResponse({'message': 'Пациент не выбран'},
                                 status=status.HTTP_409_CONFLICT)
 
 
 # ----------------------- additional classes -----------------------#
+class ParsingUtils():
+    @staticmethod
+    def parse_and_save_images(request):
+        img = request.FILES['file']
+
+        try:
+            if Photo.objects.get(photo=img):
+                raise ValueError
+        except Exception:
+            pass
+
+        fs, filename, file_url = save_file(img)  # сохранение dcm
+
+        try:
+            final_image, jpg_path = LoadImageClass.neural_network_instance_var.dicom_to_jpg(file_url, filename)
+        except Exception:
+            raise Exception()
+        final_image.save(jpg_path)  # сохранение jpeg
+        return filename
+
+    @staticmethod
+    def remove_images(filename):
+        os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
+        os.remove(Photo.get_absolute_file_path(filename))
+
+
 class CheckingUtils():
     @staticmethod
     def check_phone(phone):

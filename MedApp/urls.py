@@ -22,7 +22,9 @@ urlpatterns = [
                   re_path(r'^user/(?P<usr>\d+)$', DoctorsInfoClass.as_view(), name='users-data'),
 
                   re_path(r'^create_patient$', CreatePatientClass.as_view(), name='create-patient'),
-                  re_path(r'^edit_patient/(?P<pat>\d+)$', EditPatientClass.as_view(), name='edit-patient'),
+
+                  re_path(r'^edit_patient/(?P<pat>\d+)$', EditPatientClass.as_view({'get': 'get', 'put': 'put'}), name='edit-patient'),
+                  re_path(r'^edit_patient/(?P<pat>\d+)/photo$', EditPatientClass.as_view({'post': 'post_photo_instance'}), name='edit-photo'),
 
                   re_path(r'^patient/(?P<pat>\d+)$', PatientsInfoClass.as_view({'get': 'get', 'delete': 'delete'}), name='patients-data'),
                   re_path(r'^patient/(?P<pat>\d+)/history$', PatientsInfoClass.as_view({'get': 'get_photos_history'}), name='patients-data'),

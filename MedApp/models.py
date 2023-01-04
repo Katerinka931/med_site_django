@@ -13,11 +13,12 @@ class UserRole(Enum):
     ADMIN = 'администратор'
 
     @classmethod
-    def choices(cls):
-        return [(key.value, key.name) for key in cls]
+    def choices(cls, sel=""):
+        return [{'role': key.name, 'value': key.value} for key in cls] if sel == "" else [{'role': key.name, 'value': key.value} for key in cls if sel != key.name]
 
     # print([e.value for e in UserRole])
     # print([e.name for e in UserRole])
+    # [e.value for e in UserRole if e.name != UserRole.ADMIN.name]
 
 
 class Doctor(models.Model):
@@ -104,7 +105,8 @@ class Photo(models.Model):
         path = os.getcwd() + '/temp_storage/' + name
         return path + ext[0] if len(ext) > 0 else path
 
-    def save_photo(self, patient, filename, diagnosis, date):
+    @staticmethod
+    def create_photo(patient, filename, diagnosis, date):
         photo = Photo()
         photo.photo = filename
 
