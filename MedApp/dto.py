@@ -1,11 +1,11 @@
-from MedApp.models import Doctor, Patient, Photo
+from MedApp.models import User, Patient, Photo
 from datetime import datetime
 
 class DoctorDTO(object):
-    def __init__(self, doctor: Doctor):
+    def __init__(self, doctor: User):
         self.id = doctor.id
-        self.role = doctor.role
-        self.login = doctor.login
+        self.role = User.get_role_in_russian(doctor.role)
+        self.login = doctor.username
         self.email = doctor.email
         self.phone = doctor.phone
         self.first_name = doctor.first_name
@@ -14,10 +14,10 @@ class DoctorDTO(object):
 
 
 class DoctorWithPatientsDTO(object):
-    def __init__(self, doctor: Doctor, patients: list):
+    def __init__(self, doctor: User, patients: list):
         self.id = doctor.id
-        self.role = doctor.role
-        self.login = doctor.login
+        self.role = User.get_role_in_russian(doctor.role)
+        self.login = doctor.username
         self.email = doctor.email
         self.phone = doctor.phone
         self.first_name = doctor.first_name
@@ -29,7 +29,7 @@ class DoctorWithPatientsDTO(object):
 
 
 class PatientDTO(object):
-    def __init__(self, patient: Patient, doctor: Doctor):
+    def __init__(self, patient: Patient, doctor: User):
         self.id = patient.id
         self.first_name = patient.first_name
         self.last_name = patient.last_name
@@ -39,8 +39,7 @@ class PatientDTO(object):
         self.phone = patient.phone
         self.doctor = {
             'id': doctor.id,
-            'role': doctor.role,
-            'login': doctor.login,
+            'role': User.get_role_in_russian(doctor.role),
             'email': doctor.email,
             'phone': doctor.phone,
             'first_name': doctor.first_name,

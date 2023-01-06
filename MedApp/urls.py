@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import token_refresh
 
 
 from .CustomTokenSerializer.TokenSerializer import CustomTokenView
-from .views import DoctorsInfoClass, MainListClass, PatientsListClass, ProfileClass, CreateUserClass, EditUserClass, \
+from .views import UserInfoClass, MainListClass, PatientsListClass, ProfileClass, CreateUserClass, EditUserClass, \
     CreatePatientClass, EditPatientClass, PatientsInfoClass
 urlpatterns = [
                   re_path(r'^login', CustomTokenView.as_view(), name='token_obtain_pair'),
@@ -19,7 +19,7 @@ urlpatterns = [
 
                   re_path(r'^create_user$', CreateUserClass.as_view(), name='create-user'),
                   re_path(r'^edit_user/(?P<usr>\d+)$', EditUserClass.as_view(), name='edit-user'),
-                  re_path(r'^user/(?P<usr>\d+)$', DoctorsInfoClass.as_view(), name='users-data'),
+                  re_path(r'^user/(?P<usr>\d+)$', UserInfoClass.as_view(), name='users-data'),
 
                   re_path(r'^create_patient$', CreatePatientClass.as_view(), name='create-patient'),
 

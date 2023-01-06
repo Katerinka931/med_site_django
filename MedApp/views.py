@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from MedApp.models import Doctor, Patient, Photo, UserRole
+from MedApp.models import Patient, Photo, User
 from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
 from MedApp.neural_network import Neural_Network, save_file
 
@@ -22,18 +22,19 @@ class MainListClass(APIView):
 
     def get(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
         try:
-            roles = UserRole.choices(UserRole.ADMIN.name)
+            roles = User.get_allowed_roles(User.ADMIN)
             people = ListOfObjects.get_list_of_people_to_main_page(pk, user.role)
-            return JsonResponse({'message': 'Список', 'people': people, 'roles': roles}, status=status.HTTP_200_OK, safe=False)
+            return JsonResponse({'message': 'Список', 'people': people, 'roles': roles}, status=status.HTTP_200_OK,
+                                safe=False)
         except Exception:
-            message = "Не удалось загрузить докторов, попробуйте еще раз" if user.role == UserRole.ADMIN.name or user.role == UserRole.CHIEF.name else "Не удалось загрузить пациентов, попробуйте еще раз"
+            message = "Не удалось загрузить докторов, попробуйте еще раз" if user.role == User.ADMIN or user.role == User.CHIEF else "Не удалось загрузить пациентов, попробуйте еще раз"
             return JsonResponse({'message': message}, status=status.HTTP_404_NOT_FOUND, safe=False)
 
     def delete(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
         people = ListOfObjects.get_list_of_people_to_main_page(pk, user.role)
         remove_id = request.GET.get("remove")
 
@@ -60,7 +61,7 @@ class PatientsListClass(APIView):
 
     def delete(self, request):
         pk = request.user.id
-        doctor = Doctor.objects.get(id=pk)
+        doctor = User.objects.get(id=pk)
         remove_id = request.GET.get("remove")
         if remove_id is not None:
             remove_person(remove_id, doctor.role, 'pat')
@@ -94,15 +95,15 @@ class ProfileClass(APIView):
 
     def get(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
         transfer_object = DoctorDTO(user)
         return JsonResponse({'user': vars(transfer_object)}, status=status.HTTP_200_OK, safe=False)
 
     def post(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
         password, new_password, new_password_repeat = ProfileClass.parse_password_request(request)
-        usr = authenticate(username=user.login, password=password)
+        usr = authenticate(username=user.username, password=password)
 
         if usr is not None:
             if new_password == new_password_repeat:
@@ -119,7 +120,7 @@ class ProfileClass(APIView):
 
     def put(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
         transfer_object = DoctorDTO(user)
         lastname, firstname, middle_name, email, phone, login = ProfileClass.parse_edit_request(request)
 
@@ -129,16 +130,16 @@ class ProfileClass(APIView):
             return JsonResponse({'message': 'Некорректный ввод номера телефона'},
                                 status=status.HTTP_409_CONFLICT)
 
-        if Doctor.objects.filter(email=email).exclude(pk=user.pk):
+        if User.objects.filter(email=email).exclude(pk=user.pk):
             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует',
                                  'user': vars(transfer_object)}, status=status.HTTP_409_CONFLICT, safe=False)
         else:
-            if Doctor.objects.filter(login=login).exclude(pk=user.pk):
+            if User.objects.filter(username=login).exclude(pk=user.pk):
                 return JsonResponse(
                     {'message': 'Пользователь с таким логином уже существует', 'user': vars(transfer_object)},
                     status=status.HTTP_409_CONFLICT, safe=False)
             else:
-                user.create_or_edit_doctor(lastname, firstname, middle_name, email, phone, login, user.role)
+                user.create_or_edit_user(False, login, email, None, firstname, lastname, middle_name, phone, user.role)
                 transfer_object = DoctorDTO(user)
                 return JsonResponse({'message': 'Редактирование успешно', 'user': vars(transfer_object)},
                                     status=status.HTTP_200_OK, safe=False)
@@ -150,7 +151,7 @@ class CreateUserClass(APIView):
     @staticmethod
     def parse_request(request):
         data = JSONParser().parse(request)
-        role = [e.name for e in UserRole if e.value == data['role'].lower()][0]
+        role = [i[0] for i in User.ROLE_CHOICES if i[1] == data['role'].lower()][0]
         last_name = data['last_name']
         first_name = data['first_name']
         middle_name = data['middle_name']
@@ -162,11 +163,11 @@ class CreateUserClass(APIView):
         return role, last_name, first_name, middle_name, email, phone, login, password, password_repeat
 
     def get(self, request):
-        return JsonResponse({'roles': [e.value for e in UserRole if e.name != UserRole.ADMIN.name]},
+        return JsonResponse({'roles': User.get_allowed_roles(User.ADMIN)},
                             status=status.HTTP_200_OK)
 
     def post(self, request):
-        doc = Doctor()
+        user = User()
         try:
             role, last_name, first_name, middle_name, email, phone, login, password, password_repeat = CreateUserClass.parse_request(
                 request)
@@ -178,13 +179,12 @@ class CreateUserClass(APIView):
                                 status=status.HTTP_409_CONFLICT)
 
         if password_repeat == password:
-            if Doctor.objects.filter(email=email):
+            if User.objects.filter(email=email):
                 return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
                                     status=status.HTTP_409_CONFLICT)
             else:
                 try:
-                    create_auth_user(login, email, password, first_name, last_name)
-                    doc.create_or_edit_doctor(last_name, first_name, middle_name, email, phone, login, role)
+                    user.create_or_edit_user(True, login, email, password, first_name, last_name, middle_name, phone, role)
                     return JsonResponse({'message': 'Пользователь успешно создан'}, status=status.HTTP_200_OK)
                 except Exception:
                     return JsonResponse(
@@ -201,7 +201,7 @@ class EditUserClass(APIView):
     @staticmethod
     def parse_request(request):
         data = JSONParser().parse(request)
-        role = [e.name for e in UserRole if e.value == data['role'].lower()][0]
+        role = [i[0] for i in User.ROLE_CHOICES if i[1] == data['role'].lower()][0]
         lastname = data['last_name']
         firstname = data['first_name']
         middle_name = data['middle_name']
@@ -211,24 +211,24 @@ class EditUserClass(APIView):
         return role, lastname, firstname, middle_name, email, phone, login
 
     def get(self, request, usr):
-        doctor = Doctor.objects.get(id=usr)
+        doctor = User.objects.get(id=usr)
         transfer_object = DoctorDTO(doctor)
-        roles = UserRole.choices(UserRole.ADMIN.name)
+        roles = User.get_allowed_roles(User.ADMIN)
         return JsonResponse({'user': vars(transfer_object), 'roles': roles}, status=status.HTTP_200_OK)
 
     def put(self, request, usr):
-        doctor = Doctor.objects.get(id=usr)
+        doctor = User.objects.get(id=usr)
         role, lastname, firstname, middle_name, email, phone, login = EditUserClass.parse_request(request)
 
         if not CheckingUtils.check_phone(phone):
             return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
 
-        if Doctor.objects.filter(email=email).exclude(pk=doctor.pk):
+        if User.objects.filter(email=email).exclude(pk=doctor.pk):
             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует'},
                                 safe=False, status=status.HTTP_409_CONFLICT)
         else:
             try:
-                doctor.create_or_edit_doctor(lastname, firstname, middle_name, email, phone, login, role)
+                doctor.create_or_edit_user(False, login, email, None, firstname, lastname, middle_name, phone, role)
                 return JsonResponse({'message': 'Редактирование успешно'}, status=status.HTTP_200_OK, safe=False)
             except Exception:
                 return JsonResponse(
@@ -236,19 +236,20 @@ class EditUserClass(APIView):
                     safe=False, status=status.HTTP_409_CONFLICT)
 
 
-class DoctorsInfoClass(APIView):
+class UserInfoClass(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, usr):
-        doctor = Doctor.objects.get(pk=usr)
+        doctor = User.objects.get(pk=usr)
+        roles = User.get_allowed_roles()
         patients = ListOfObjects.get_users_patients(doctor)
         doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
-        roles = UserRole.choices()
-        return JsonResponse({'user': vars(doctor_transfer_object), 'roles': roles}, status=status.HTTP_200_OK, safe=False)
+        return JsonResponse({'user': vars(doctor_transfer_object), 'roles': roles}, status=status.HTTP_200_OK,
+                            safe=False)
 
     def delete(self, request, usr):
         remove_id = request.GET.get("remove")
-        doctor = Doctor.objects.get(pk=usr)
+        doctor = User.objects.get(pk=usr)
         patients = ListOfObjects.get_users_patients(doctor)
         doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
 
@@ -278,7 +279,7 @@ class CreatePatientClass(APIView):
 
     def get(self, request):
         doctors = ListOfObjects.get_doctors_list(
-            Doctor.objects.all().exclude(role=UserRole.ADMIN.name).exclude(role=UserRole.OPERATOR.name).order_by(
+            User.objects.all().exclude(role=User.ADMIN).exclude(role=User.OPERATOR).order_by(
                 'last_name'))
         return JsonResponse({'message': '', 'doctors': doctors}, status=status.HTTP_200_OK, safe=False)
 
@@ -292,7 +293,7 @@ class CreatePatientClass(APIView):
             if not CheckingUtils.check_phone(phone):
                 return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
 
-            if Doctor.objects.get(pk=pk).role == UserRole.DOCTOR.name:
+            if User.objects.get(pk=pk).role == User.DOCTOR:
                 doctor_number = pk
             else:
                 doctor_number = doc_number
@@ -339,10 +340,10 @@ class EditPatientClass(GenericViewSet):
 
     def get(self, request, pat):
         patient = Patient.objects.get(pk=pat)
-        patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+        patients_doctor = User.objects.get(pk=patient.doctor_number_id)
         patient_transfer = PatientDTO(patient, patients_doctor)
         doctors = ListOfObjects.get_doctors_list(
-            Doctor.objects.all().exclude(role=UserRole.ADMIN.name).exclude(role=UserRole.OPERATOR.name).order_by(
+            User.objects.all().exclude(role=User.ADMIN).exclude(role=User.OPERATOR).order_by(
                 'last_name'))
 
         photo_instance = Photo.objects.filter(patient_number_id=pat)
@@ -374,7 +375,7 @@ class EditPatientClass(GenericViewSet):
             if not CheckingUtils.check_phone(phone):
                 return JsonResponse({'message': 'Некорректный ввод номера телефона'}, status=status.HTTP_409_CONFLICT)
 
-            doctor_number = pk if Doctor.objects.get(pk=pk).role == UserRole.DOCTOR.name else doc_number
+            doctor_number = pk if User.objects.get(pk=pk).role == User.DOCTOR else doc_number
         except Exception:
             return JsonResponse({'message': 'Все поля должны быть заполнены'}, status=status.HTTP_409_CONFLICT)
 
@@ -428,7 +429,7 @@ class PatientsInfoClass(GenericViewSet):
 
     def get(self, request, pat):
         patient = Patient.objects.get(pk=pat)
-        patients_doctor = Doctor.objects.get(pk=patient.doctor_number_id)
+        patients_doctor = User.objects.get(pk=patient.doctor_number_id)
 
         patient_transfer = PatientDTO(patient, patients_doctor)
         photo_instance = Photo.objects.filter(patient_number_id=pat)
@@ -498,10 +499,10 @@ class LoadImageClass(GenericViewSet):
 
     def get(self, request):
         pk = request.user.id
-        user = Doctor.objects.get(pk=pk)
+        user = User.objects.get(pk=pk)
 
         patients = ListOfObjects.get_patients_list(
-            Patient.objects.all()) if user.role == UserRole.CHIEF.name else ListOfObjects.get_patients_list(
+            Patient.objects.all()) if user.role == User.CHIEF else ListOfObjects.get_patients_list(
             Patient.objects.filter(doctor_number_id=pk))
 
         return JsonResponse({'message': '', 'patients': patients}, status=status.HTTP_200_OK, safe=False)
@@ -624,7 +625,7 @@ class ListOfObjects:
         doctors = list()
         for doctor in doctors_queryset:
             doctors.append(
-                {'id': doctor.pk, 'role': doctor.role, 'login': doctor.login, 'email': doctor.email,
+                {'id': doctor.pk, 'role': User.get_role_in_russian(doctor.role), 'login': doctor.username, 'email': doctor.email,
                  'phone': doctor.phone,
                  'first_name': doctor.first_name, 'last_name': doctor.last_name, 'middle_name': doctor.middle_name})
         return doctors
@@ -637,12 +638,13 @@ class ListOfObjects:
         :param user_role:
         :return: list of people according to user`s role
         """
-        if user_role == UserRole.ADMIN.name:
-            people = ListOfObjects.get_doctors_list(Doctor.objects.all().exclude(pk=pk).order_by('last_name'))
-        elif user_role == UserRole.CHIEF.name:
+        print(User.ADMIN)
+        if user_role == User.ADMIN:  # UserRole.ADMIN.name:
+            people = ListOfObjects.get_doctors_list(User.objects.all().exclude(pk=pk).order_by('last_name'))
+        elif user_role == User.CHIEF:
             people = ListOfObjects.get_doctors_list(
-                Doctor.objects.filter(role=UserRole.DOCTOR.name).order_by('last_name'))
-        elif user_role == UserRole.OPERATOR.name:
+                User.objects.filter(role=User.DOCTOR).order_by('last_name'))
+        elif user_role == User.OPERATOR:
             people = ListOfObjects.get_patients_list(Patient.objects.all().order_by('last_name'))
         else:
             people = ListOfObjects.get_patients_list(Patient.objects.filter(doctor_number_id=pk).order_by('last_name'))
@@ -655,7 +657,7 @@ class ListOfObjects:
         :return: list of patients
         """
         return ListOfObjects.get_patients_list(
-            Patient.objects.all().order_by('last_name')) if doctor.role == UserRole.OPERATOR.name \
+            Patient.objects.all().order_by('last_name')) if doctor.role == User.OPERATOR \
             else ListOfObjects.get_patients_list(Patient.objects.filter(doctor_number=doctor.pk).order_by('last_name'))
 
     @staticmethod
@@ -671,22 +673,25 @@ class ListOfObjects:
 
 # ----------------------- additional functions to change-----------------------#
 def remove_person(remove_id, user_role, deleted_person_type):
-    if (user_role == UserRole.ADMIN.name or user_role == UserRole.CHIEF.name) and deleted_person_type == 'user':
-        doctor = Doctor()
+    if (user_role == User.ADMIN or user_role == User.CHIEF) and deleted_person_type == 'user':
+        doctor = User()
         doctor.remove_doctor(remove_id)
     else:
         patient = Patient()
         patient.remove_patient(remove_id)
 
 
-def create_auth_user(login, email, password, firstname, lastname):
-    user = User.objects.create_user(login, email, password)
-    user.first_name = firstname
-    user.last_name = lastname
-    user.save()
-
-
 @api_view(['POST'])
 def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
+
+def create_user(self, login, email, password, firstname, lastname, middlename, phone, role):
+    user = User.objects.create_user(login, email, password)
+    user.first_name = firstname
+    user.last_name = lastname
+    user.middle_name = middlename
+    user.phone = phone
+    user.role = role
+    user.is_staff = True
+    user.save()

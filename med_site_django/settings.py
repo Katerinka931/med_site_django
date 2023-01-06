@@ -34,6 +34,8 @@ CORS_ORIGIN_WHITELIST = [
     'http://localhost:8081',
 ]
 
+AUTH_USER_MODEL = 'MedApp.User'
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -77,7 +79,6 @@ JWT_AUTH = {
     'JWT_ALLOW_REFRESH': True,
     'JWT_EXPIRATION_DELTA': datetime.timedelta(seconds=300),
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
-    # 'JWT_EXPIRATION_DELTA': datetime.timedelta(days=2),  # seconds=3600
     'JWT_AUTH_HEADER_PREFIX': 'Bearer',
 }
 
@@ -107,7 +108,7 @@ WSGI_APPLICATION = 'med_site_django.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'medicine_db',
+        'NAME': 'new_medicine_db',
         'USER': 'postgres',
         'PASSWORD': '1',
         'HOST': '127.0.0.1',

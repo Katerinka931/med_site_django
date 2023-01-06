@@ -1,58 +1,82 @@
 import os
-from enum import Enum
-
-from django.db import models
-from django.contrib.auth.models import User
 import base64
 
-
-class UserRole(Enum):
-    DOCTOR = 'врач'
-    CHIEF = 'главный врач'
-    OPERATOR = 'оператор'
-    ADMIN = 'администратор'
-
-    @classmethod
-    def choices(cls, sel=""):
-        return [{'role': key.name, 'value': key.value} for key in cls] if sel == "" else [{'role': key.name, 'value': key.value} for key in cls if sel != key.name]
-
-    # print([e.value for e in UserRole])
-    # print([e.name for e in UserRole])
-    # [e.value for e in UserRole if e.name != UserRole.ADMIN.name]
+from django.db import models
+from django.contrib.auth.models import AbstractUser
 
 
-class Doctor(models.Model):
-    role = models.CharField(max_length=100)
-    login = models.CharField(max_length=150, unique=True)
-    email = models.EmailField(null=True, unique=True)
+class User(AbstractUser):
+    ADMIN = 1
+    CHIEF = 2
+    DOCTOR = 3
+    OPERATOR = 4
+
+    ROLE_CHOICES = (
+        (ADMIN, 'администратор'),
+        (CHIEF, 'главный врач'),
+        (DOCTOR, 'врач'),
+        (OPERATOR, 'оператор'),
+    )
+
+    class Meta:
+        verbose_name = 'user'
+        verbose_name_plural = 'users'
+
+    role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, blank=True, null=True)
     phone = models.CharField(max_length=20, null=True)
-
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
     middle_name = models.CharField(max_length=100, null=True)
 
     def __str__(self):
-        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n Role: {self.role} \n Login: {self.login} \n Email: {self.email} \n Phone {self.phone}"
+        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n Role: {self.role} \n Login: {self.username} \n Email: {self.email} \n Phone {self.phone}"
 
-    def create_or_edit_doctor(self, lastname, firstname, middle_name, email, phone, login, role):
-        doctor = Doctor() if self.pk is None else self
-        doctor.role = role
-        doctor.last_name = lastname
-        doctor.first_name = firstname
-        doctor.middle_name = middle_name
-        doctor.email = email
-        doctor.phone = phone
-        doctor.login = login
-        doctor.save()
+    @staticmethod
+    def index_to_role_for_old_model(index):  # todo temp in token serializer remove when roles will correct
+        if index == 1:
+            role_to_send = 'ADMIN'
+        elif index == 2:
+            role_to_send = 'CHIEF'
+        elif index == 3:
+            role_to_send = 'DOCTOR'
+        else:
+            role_to_send = 'OPERATOR'
+        return role_to_send
+
+    @staticmethod
+    def get_role_in_russian(index):
+        return [role[1] for role in User.ROLE_CHOICES if role[0] == index][0]
+
+    @staticmethod
+    def get_allowed_roles(*roles):
+        all_roles = [role for role in User.ROLE_CHOICES]
+        if len(roles) != 0:
+            for role in roles:
+                for item in all_roles:
+                    if role == item[0]:
+                        all_roles.remove(item)
+
+        new_l = [role_name[1] for role_name in all_roles]
+        return new_l
+
+    def create_or_edit_user(self, flag, login, email, password, firstname, lastname, middlename, phone, role):
+        if flag:
+            user = User.objects.create_user(login, email, password)
+        else:
+            user = self
+        user.first_name = firstname
+        user.last_name = lastname
+        user.middle_name = middlename
+        user.phone = phone
+        user.role = role
+        user.save()
 
     def remove_doctor(self, pk):
-        remove_doctor = Doctor.objects.get(pk=pk)
+        remove_doctor = User.objects.get(pk=pk)
         User.objects.get(username=remove_doctor.login).delete()
         remove_doctor.delete()
 
 
 class Patient(models.Model):
-    doctor_number = models.ForeignKey(Doctor, on_delete=models.CASCADE, blank=True)
+    doctor_number = models.ForeignKey(User, on_delete=models.CASCADE, blank=True)
 
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)

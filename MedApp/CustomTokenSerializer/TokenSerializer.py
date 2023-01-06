@@ -1,8 +1,6 @@
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenObtainSerializer
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
-
-from MedApp.models import Doctor
-
+from MedApp.models import User
 
 class CustomTokenSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
@@ -12,7 +10,8 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
 
         data["refresh"] = str(refresh)
         data["access"] = str(refresh.access_token)
-        data["role"] = Doctor.objects.get(login=self.user).role
+        # todo delete it role
+        data["role"] = User.index_to_role_for_old_model(User.objects.get(username=self.user.username).role)
 
         return data
 
