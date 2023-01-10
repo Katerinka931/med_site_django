@@ -108,7 +108,7 @@ WSGI_APPLICATION = 'med_site_django.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'new_medicine_db',
+        'NAME': 'medicine_db',
         'USER': 'postgres',
         'PASSWORD': '1',
         'HOST': '127.0.0.1',

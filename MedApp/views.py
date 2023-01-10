@@ -1,6 +1,7 @@
 import os
-from datetime import datetime
+import time
 
+from datetime import datetime
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
@@ -8,14 +9,14 @@ from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.parsers import JSONParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
+from MedApp.custom_permission_classes import *
 from MedApp.models import Patient, Photo, User
 from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
 from MedApp.neural_network import Neural_Network, save_file
-
 
 class MainListClass(APIView):
     permission_classes = [IsAuthenticated]
@@ -50,11 +51,20 @@ class MainListClass(APIView):
 
 
 class PatientsListClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsChief)
+
+    @staticmethod
+    def get_patients_list(patients_queryset):
+        patients = list()
+        for patient in patients_queryset:
+            doctor = User.objects.get(pk=patient.doctor_number_id)
+            patient_transfer = PatientDTO(patient, doctor)
+            patients.append(vars(patient_transfer))
+        return patients
 
     def get(self, request):
         try:
-            patients = ListOfObjects.get_patients_list(Patient.objects.all().order_by('last_name'))
+            patients = PatientsListClass.get_patients_list(Patient.objects.all().order_by('last_name'))
             return JsonResponse({'message': '', 'people': patients}, status=status.HTTP_200_OK, safe=False)
         except Exception:
             return JsonResponse({'message': 'Не удалось загрузить пациентов'}, status=status.HTTP_404_NOT_FOUND)
@@ -71,7 +81,7 @@ class PatientsListClass(APIView):
 
 
 class ProfileClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, )
 
     @staticmethod
     def parse_password_request(request):
@@ -146,7 +156,7 @@ class ProfileClass(APIView):
 
 
 class CreateUserClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsAdminOrChief)
 
     @staticmethod
     def parse_request(request):
@@ -163,8 +173,10 @@ class CreateUserClass(APIView):
         return role, last_name, first_name, middle_name, email, phone, login, password, password_repeat
 
     def get(self, request):
-        return JsonResponse({'roles': User.get_allowed_roles(User.ADMIN)},
-                            status=status.HTTP_200_OK)
+        roles = User.get_allowed_roles(User.ADMIN) if request.user.role == 1 else User.get_allowed_roles(User.ADMIN,
+                                                                                                         User.CHIEF,
+                                                                                                         User.OPERATOR)
+        return JsonResponse({'roles': roles}, status=status.HTTP_200_OK)
 
     def post(self, request):
         user = User()
@@ -184,7 +196,8 @@ class CreateUserClass(APIView):
                                     status=status.HTTP_409_CONFLICT)
             else:
                 try:
-                    user.create_or_edit_user(True, login, email, password, first_name, last_name, middle_name, phone, role)
+                    user.create_or_edit_user(True, login, email, password, first_name, last_name, middle_name, phone,
+                                             role)
                     return JsonResponse({'message': 'Пользователь успешно создан'}, status=status.HTTP_200_OK)
                 except Exception:
                     return JsonResponse(
@@ -196,7 +209,7 @@ class CreateUserClass(APIView):
 
 
 class EditUserClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsAdminOrChief)
 
     @staticmethod
     def parse_request(request):
@@ -211,9 +224,18 @@ class EditUserClass(APIView):
         return role, lastname, firstname, middle_name, email, phone, login
 
     def get(self, request, usr):
+        pk = request.user.id
+        user = User.objects.get(pk=pk)
         doctor = User.objects.get(id=usr)
-        transfer_object = DoctorDTO(doctor)
-        roles = User.get_allowed_roles(User.ADMIN)
+        if user.role == 1:
+            transfer_object = DoctorDTO(doctor)
+            roles = User.get_allowed_roles(User.ADMIN)
+        elif doctor.role == 3:
+            transfer_object = DoctorDTO(doctor)
+            roles = User.get_allowed_roles(User.ADMIN, User.OPERATOR, User.CHIEF)
+        else:
+            return JsonResponse({'message': 'Доступ запрещен'}, status=status.HTTP_403_FORBIDDEN)
+
         return JsonResponse({'user': vars(transfer_object), 'roles': roles}, status=status.HTTP_200_OK)
 
     def put(self, request, usr):
@@ -237,7 +259,7 @@ class EditUserClass(APIView):
 
 
 class UserInfoClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsAdminOrChief)
 
     def get(self, request, usr):
         doctor = User.objects.get(pk=usr)
@@ -263,7 +285,7 @@ class UserInfoClass(APIView):
 
 
 class CreatePatientClass(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsNotAdmin)
 
     @staticmethod
     def parse_request(request):
@@ -311,7 +333,7 @@ class CreatePatientClass(APIView):
 
 
 class EditPatientClass(GenericViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsNotAdmin)
 
     @staticmethod
     def parse_request(request):
@@ -339,30 +361,37 @@ class EditPatientClass(GenericViewSet):
         return EditPatientClass.get_photo_transfer(actual_photo.photo)
 
     def get(self, request, pat):
+        pk = request.user.id
+        current_user = User.objects.get(pk=pk)
         patient = Patient.objects.get(pk=pat)
         patients_doctor = User.objects.get(pk=patient.doctor_number_id)
-        patient_transfer = PatientDTO(patient, patients_doctor)
-        doctors = ListOfObjects.get_doctors_list(
-            User.objects.all().exclude(role=User.ADMIN).exclude(role=User.OPERATOR).order_by(
-                'last_name'))
 
-        photo_instance = Photo.objects.filter(patient_number_id=pat)
-        if photo_instance:
-            photo = photo_instance.get(actual=1)
-            try:
-                file = photo.convert_image(photo.get_absolute_file_path(photo.photo, '.jpeg'))
-                photo_transfer = PhotoDTO(photo, file)
+        if (current_user.role == 3 and patients_doctor.pk == pk) or current_user.role != 3:
+            patient_transfer = PatientDTO(patient, patients_doctor)
+            doctors = ListOfObjects.get_doctors_list(
+                User.objects.all().exclude(role=User.ADMIN).exclude(role=User.OPERATOR).order_by(
+                    'last_name'))
+
+            photo_instance = Photo.objects.filter(patient_number_id=pat)
+            if photo_instance:
+                photo = photo_instance.get(actual=1)
+                try:
+                    file = photo.convert_image(photo.get_absolute_file_path(photo.photo, '.jpeg'))
+                    photo_transfer = PhotoDTO(photo, file)
+                    return JsonResponse(
+                        {'message': 'Актуальный снимок', 'patient': vars(patient_transfer),
+                         'photo': vars(photo_transfer),
+                         'doctors': doctors},
+                        status=status.HTTP_200_OK, safe=False)
+                except Exception:
+                    return JsonResponse({'message': 'Ошибка загрузки фотографии', 'patient': vars(patient_transfer)},
+                                        status=status.HTTP_404_NOT_FOUND, safe=False)
+            else:
                 return JsonResponse(
-                    {'message': 'Актуальный снимок', 'patient': vars(patient_transfer), 'photo': vars(photo_transfer),
-                     'doctors': doctors},
+                    {'message': 'Изображение еще не загружено', 'patient': vars(patient_transfer), 'doctors': doctors},
                     status=status.HTTP_200_OK, safe=False)
-            except Exception:
-                return JsonResponse({'message': 'Ошибка загрузки фотографии', 'patient': vars(patient_transfer)},
-                                    status=status.HTTP_404_NOT_FOUND, safe=False)
         else:
-            return JsonResponse(
-                {'message': 'Изображение еще не загружено', 'patient': vars(patient_transfer), 'doctors': doctors},
-                status=status.HTTP_200_OK, safe=False)
+            return JsonResponse({'message': 'Доступ запрещен'}, status=status.HTTP_403_FORBIDDEN)
 
     def put(self, request, pat):
         pk = request.user.id
@@ -425,7 +454,7 @@ class EditPatientClass(GenericViewSet):
 
 
 class PatientsInfoClass(GenericViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsNotAdmin)
 
     def get(self, request, pat):
         patient = Patient.objects.get(pk=pat)
@@ -481,7 +510,7 @@ class PatientsInfoClass(GenericViewSet):
 
 
 class LoadImageClass(GenericViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated, IsDoctorOrChief)
 
     neural_network_instance_var = Neural_Network()
     photo_object_var = Photo()
@@ -508,6 +537,7 @@ class LoadImageClass(GenericViewSet):
         return JsonResponse({'message': '', 'patients': patients}, status=status.HTTP_200_OK, safe=False)
 
     def post_predict(self, request):
+        time.sleep(1.5)
         try:
             filename = ParsingUtils.parse_and_save_images(request)
         except ValueError:
@@ -625,7 +655,8 @@ class ListOfObjects:
         doctors = list()
         for doctor in doctors_queryset:
             doctors.append(
-                {'id': doctor.pk, 'role': User.get_role_in_russian(doctor.role), 'login': doctor.username, 'email': doctor.email,
+                {'id': doctor.pk, 'role': User.get_role_in_russian(doctor.role), 'login': doctor.username,
+                 'email': doctor.email,
                  'phone': doctor.phone,
                  'first_name': doctor.first_name, 'last_name': doctor.last_name, 'middle_name': doctor.middle_name})
         return doctors
@@ -638,8 +669,7 @@ class ListOfObjects:
         :param user_role:
         :return: list of people according to user`s role
         """
-        print(User.ADMIN)
-        if user_role == User.ADMIN:  # UserRole.ADMIN.name:
+        if user_role == User.ADMIN:
             people = ListOfObjects.get_doctors_list(User.objects.all().exclude(pk=pk).order_by('last_name'))
         elif user_role == User.CHIEF:
             people = ListOfObjects.get_doctors_list(
@@ -685,6 +715,7 @@ def remove_person(remove_id, user_role, deleted_person_type):
 def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
+
 
 def create_user(self, login, email, password, firstname, lastname, middlename, phone, role):
     user = User.objects.create_user(login, email, password)

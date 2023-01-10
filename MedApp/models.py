@@ -29,6 +29,12 @@ class User(AbstractUser):
     def __str__(self):
         return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n Role: {self.role} \n Login: {self.username} \n Email: {self.email} \n Phone {self.phone}"
 
+
+    @staticmethod
+    def get_name_roles():
+        return ['ADMIN', 'CHIEF', 'DOCTOR', 'OPERATOR'] #TODO delete
+
+
     @staticmethod
     def index_to_role_for_old_model(index):  # todo temp in token serializer remove when roles will correct
         if index == 1:
@@ -44,6 +50,7 @@ class User(AbstractUser):
     @staticmethod
     def get_role_in_russian(index):
         return [role[1] for role in User.ROLE_CHOICES if role[0] == index][0]
+
 
     @staticmethod
     def get_allowed_roles(*roles):

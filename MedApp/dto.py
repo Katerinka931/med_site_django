@@ -1,6 +1,7 @@
 from MedApp.models import User, Patient, Photo
 from datetime import datetime
 
+
 class DoctorDTO(object):
     def __init__(self, doctor: User):
         self.id = doctor.id
@@ -47,6 +48,7 @@ class PatientDTO(object):
             'middle_name': doctor.middle_name
         }
 
+
 class PhotoDTO(object):
     def __init__(self, photo: Photo, file):
         self.id = photo.id
@@ -55,5 +57,3 @@ class PhotoDTO(object):
         self.patient = photo.patient_number_id
         self.photo = file
         self.date_of_creation = datetime.timestamp(photo.date_of_creation)
-
-
