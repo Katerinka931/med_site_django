@@ -27,13 +27,8 @@ class User(AbstractUser):
     middle_name = models.CharField(max_length=100, null=True)
 
     def __str__(self):
-        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n Role: {self.role} \n Login: {self.username} \n Email: {self.email} \n Phone {self.phone}"
-
-
-    @staticmethod
-    def get_name_roles():
-        return ['ADMIN', 'CHIEF', 'DOCTOR', 'OPERATOR'] #TODO delete
-
+        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n " \
+               f"Role: {self.role} \n Login: {self.username} \n Email: {self.email} \n Phone {self.phone}"
 
     @staticmethod
     def index_to_role_for_old_model(index):  # todo temp in token serializer remove when roles will correct
@@ -51,6 +46,10 @@ class User(AbstractUser):
     def get_role_in_russian(index):
         return [role[1] for role in User.ROLE_CHOICES if role[0] == index][0]
 
+    def display_role(self):
+        return User.get_role_in_russian(self.role)
+
+    display_role.short_description = 'Role'
 
     @staticmethod
     def get_allowed_roles(*roles):
@@ -94,7 +93,14 @@ class Patient(models.Model):
     phone = models.CharField(max_length=20, null=True)
 
     def __str__(self):
-        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} \n Date of birth: {self.date_of_birth} \n Doctor: {self.doctor_number} \n Email: {self.email} \n Phone {self.phone}"
+        return f"Last name: {self.last_name} \n First name: {self.first_name} \n Middle name: {self.middle_name} " \
+               f"\n Date of birth: {self.date_of_birth} \n Doctor: {self.doctor_number} \n Email: {self.email} \n Phone {self.phone}"
+
+    def display_doctor(self):
+        return self.doctor_number.last_name + ' ' + self.doctor_number.first_name + ' ' + self.doctor_number.middle_name + ' (id=' + str(
+            self.doctor_number.pk) + ')'
+
+    display_doctor.short_description = 'display_doc'
 
     def create_patient(self, lastname, firstname, middle_name, email, phone, date, doctor_number):
         patient = Patient() if self.id is None else self
@@ -122,7 +128,7 @@ class Photo(models.Model):
         ordering = ["patient_number_id", "-date_of_creation"]
 
     def __str__(self):
-        return f"Photo name: {self.photo} \n Actual: {self.actual} \n Diagnosis: {self.diagnosis} \n Date of creation: {self.date_of_creation} \n Patient: {self.patient_number}"
+        return f"Photo name: {self.photo} \n Actual: {self.actual} \n Diagnosis: {self.diagnosis} \n Date of creation: " f"{self.date_of_creation} \n Patient: {self.patient_number}"
 
     def convert_image(self, jpg_path):
         with open(jpg_path, "rb") as image:
@@ -135,6 +141,12 @@ class Photo(models.Model):
     def get_absolute_file_path(name, *ext):
         path = os.getcwd() + '/temp_storage/' + name
         return path + ext[0] if len(ext) > 0 else path
+
+    def display_patient(self):
+        return self.patient_number.last_name + ' ' + self.patient_number.first_name + ' ' + self.patient_number.middle_name + ' (id=' + str(
+            self.patient_number.pk) + ')'
+
+    display_patient.short_description = 'Patient'
 
     @staticmethod
     def create_photo(patient, filename, diagnosis, date):

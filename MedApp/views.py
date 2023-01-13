@@ -537,7 +537,7 @@ class LoadImageClass(GenericViewSet):
         return JsonResponse({'message': '', 'patients': patients}, status=status.HTTP_200_OK, safe=False)
 
     def post_predict(self, request):
-        time.sleep(1.5)
+        # time.sleep(1.5)
         try:
             filename = ParsingUtils.parse_and_save_images(request)
         except ValueError:
