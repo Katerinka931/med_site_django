@@ -4,7 +4,7 @@ from django.conf import settings
 from django.urls import re_path
 from rest_framework_simplejwt.views import token_refresh
 
-from .CustomTokenSerializer.TokenSerializer import CustomTokenView
+from .serializers.TokenSerializer import CustomTokenView
 from .views import UserInfoClass, MainListClass, PatientsListClass, ProfileClass, CreateUserClass, EditUserClass, \
     CreatePatientClass, EditPatientClass, PatientsInfoClass
 

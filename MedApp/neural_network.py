@@ -16,11 +16,14 @@ storage_path = os.getcwd() + '/temp_storage/'
 model = keras.models.load_model(os.getcwd() + "/KerasModel", custom_objects=None,
                                 compile=True,
                                 options=None)
+
+
 def save_file(file):
     fs = FileSystemStorage(location=storage_path)
     filename = fs.save(file.name, file)
     file_url = fs.path(filename)
     return fs, filename, file_url
+
 
 class Disease(Enum):
     PNEUMONIA = 'Пневмония'
@@ -33,7 +36,7 @@ class Disease(Enum):
         return [(key.value, key.name) for key in cls]
 
 
-class Neural_Network():
+class NeuralNetwork():
     def dicom_to_jpg(self, image_path, img_name):
         ds = dicom.read_file(image_path, force=True)
         ds.file_meta.TransferSyntaxUID = pydicom.uid.ImplicitVRLittleEndian
@@ -75,7 +78,6 @@ class Neural_Network():
         labels = dict((v, k) for k, v in labels.items())
         predictions = [labels[k] for k in predicted]
         return [e.value for e in Disease if e.name == predictions[0]][0]
-
 
     def save_to_file(self, prediction, name_of_file):  # "results.csv"
         results = pd.DataFrame({"Filename": name_of_file,

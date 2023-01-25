@@ -1,5 +1,4 @@
 import os
-import time
 
 from datetime import datetime
 from django.contrib.auth import logout
@@ -9,14 +8,15 @@ from django.http import JsonResponse
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.parsers import JSONParser
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from MedApp.custom_permission_classes import *
+from MedApp.permissions.custom_permissions import *
 from MedApp.models import Patient, Photo, User
-from MedApp.dto import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
-from MedApp.neural_network import Neural_Network, save_file
+from MedApp.serializers.DTO import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
+from MedApp.neural_network import NeuralNetwork, save_file
+
 
 class MainListClass(APIView):
     permission_classes = [IsAuthenticated]
@@ -81,7 +81,7 @@ class PatientsListClass(APIView):
 
 
 class ProfileClass(APIView):
-    permission_classes = (IsAuthenticated, )
+    permission_classes = (IsAuthenticated,)
 
     @staticmethod
     def parse_password_request(request):
@@ -512,7 +512,7 @@ class PatientsInfoClass(GenericViewSet):
 class LoadImageClass(GenericViewSet):
     permission_classes = (IsAuthenticated, IsDoctorOrChief)
 
-    neural_network_instance_var = Neural_Network()
+    neural_network_instance_var = NeuralNetwork()
     photo_object_var = Photo()
 
     @staticmethod
