@@ -77,7 +77,7 @@ class User(AbstractUser):
 
     def remove_doctor(self, pk):
         remove_doctor = User.objects.get(pk=pk)
-        User.objects.get(username=remove_doctor.login).delete()
+        User.objects.get(username=remove_doctor.username).delete()
         remove_doctor.delete()
 
 
