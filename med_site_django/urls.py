@@ -5,5 +5,5 @@ from django.contrib import admin
 
 urlpatterns = [
     path('', include('MedApp.urls')),
-    re_path(r'^admin/', admin.site.urls),
+    re_path(r'^admin/', admin.site.urls),  #http://127.0.0.1:8000/admin
 ]

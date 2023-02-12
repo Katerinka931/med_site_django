@@ -139,6 +139,9 @@ class ProfileClass(APIView):
         except ValueError:
             return JsonResponse({'message': 'Некорректный ввод номера телефона'},
                                 status=status.HTTP_409_CONFLICT)
+        except Exception:
+            return JsonResponse({'message': 'Введите номер телефона!'},
+                                status=status.HTTP_409_CONFLICT)
 
         if User.objects.filter(email=email).exclude(pk=user.pk):
             return JsonResponse({'message': 'Пользователь с таким адресом электронной почты уже существует',
