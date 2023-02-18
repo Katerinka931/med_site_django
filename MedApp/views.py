@@ -442,7 +442,7 @@ class EditPatientClass(GenericViewSet):
                 return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                     status=status.HTTP_409_CONFLICT)
             except Exception:
-                return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+                return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
 
             actual_photo = Photo.objects.filter(patient_number=pat).get(actual=1)
             if actual_photo.date_of_creation.timestamp() > date.timestamp():
@@ -548,7 +548,7 @@ class LoadImageClass(GenericViewSet):
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
         except Exception:
-            return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
 
         try:
             result = LoadImageClass.neural_network_instance_var.predict_image(
@@ -570,7 +570,7 @@ class LoadImageClass(GenericViewSet):
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
         except Exception:
-            return JsonResponse({'message': 'Неверный тип файла: загрузите .dcm'}, status=status.HTTP_409_CONFLICT)
+            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
 
         try:
             diagnosis, patient_id = LoadImageClass.parse_save_request(request)
