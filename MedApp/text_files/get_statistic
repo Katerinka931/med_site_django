@@ -1,5 +1,17 @@
+import os
+
+import numpy as np
+from keras.preprocessing.image import ImageDataGenerator
+from tensorflow import keras
+
+
+model = keras.models.load_model(os.getcwd() + "/KerasModel", custom_objects=None,
+                                compile=True,
+                                options=None)
+
+
 train_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
-    directory='D:/Desktop/Диплом/.../train', #t o d o
+    directory='D:/Desktop/Диплом/ComplexDiplomaProject/dataset/train',
     target_size=(224, 224),
     color_mode="grayscale",
     batch_size=32,
@@ -7,7 +19,7 @@ train_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
     shuffle=True, seed=42)
 
 test_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
-    directory='D:/Desktop/Диплом/Datasets/dataset/test_1000',
+    directory='D:/Desktop/Диплом/ComplexDiplomaProject/dataset/test_1000',
     target_size=(224, 224),
     color_mode="grayscale",
     batch_size=1,
@@ -16,8 +28,8 @@ test_generator = ImageDataGenerator(rescale=1. / 255).flow_from_directory(
     seed=42)
 
 class Neural_Network():
-    def get_statistic(self):  # result = 79,7%
-        # Predict Output
+    @staticmethod
+    def get_statistic():  # result = 79,8%
         STEP_SIZE_TEST = test_generator.n // test_generator.batch_size
         test_generator.reset()
         pred = model.predict(test_generator,
@@ -43,6 +55,8 @@ class Neural_Network():
                 count_accurate += 1
             current_idx += 1
         acc = count_accurate / STEP_SIZE_TEST
-        print(f"The accuracy on predicted the test images is {round(acc * 100, 2)}%.")
+        print(f"Точность предсказания тестовых изображений: {round(acc * 100, 2)}%.")
 
+if __name__ == '__main__':
+    Neural_Network.get_statistic()
 # labels = (train_generator.class_indices)   # если надо пользовательские компоненты (если видов изо больше/меньше 4)

@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from django.core.files.storage import FileSystemStorage
 from keras.api.keras.preprocessing import image
-# from keras_preprocessing import image
 from tensorflow import keras
 import pydicom as dicom
 import pydicom.uid
