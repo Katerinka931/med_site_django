@@ -68,13 +68,13 @@ class NeuralNetwork:
         ds.save_as(dcm_name)
 
     @staticmethod
-    def predict_image(img_path): # todo описать каждое действие
-        img = image.load_img(img_path, target_size=(224, 224), grayscale=True)
-        img_arr = image.img_to_array(img)
-        img_arr = np.expand_dims(img_arr, axis=0)
+    def predict_image(img_path):
+        img = image.load_img(img_path, target_size=(224, 224), grayscale=True)  # выгружает изображение в PIL формат (Python Image Library)
+        img_arr = image.img_to_array(img)                                       # преобразует PIL изображение в массив Numpy
+        img_arr = np.expand_dims(img_arr, axis=0)                               # вставляет новую ось, которая представлена в виде развернутого массива
 
-        pred = model.predict(img_arr)
-        predicted = np.argmax(pred, axis=1)
+        pred = model.predict(img_arr)                                           # генерирует выходное значение на основе входного
+        predicted = np.argmax(pred, axis=1)                                     # индексы максимальных значений вдоль оси
         labels = {'COVID19': 0, 'NORMAL': 1, 'PNEUMONIA': 2, 'TURBERCULOSIS': 3}
         labels = dict((v, k) for k, v in labels.items())
         predictions = [labels[k] for k in predicted]
