@@ -60,3 +60,10 @@ class Neural_Network():
 if __name__ == '__main__':
     Neural_Network.get_statistic()
 # labels = (train_generator.class_indices)   # если надо пользовательские компоненты (если видов изо больше/меньше 4)
+
+
+    # метод сохранения результатов в csv (не используется в программе)
+    def save_to_file(self, prediction, name_of_file):  # "results.csv"
+        results = pd.DataFrame({"Filename": name_of_file,
+                                "Predictions": prediction})
+        results.to_csv(name_of_file, index=False)

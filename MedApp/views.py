@@ -514,8 +514,6 @@ class PatientsInfoClass(GenericViewSet):
 
 class LoadImageClass(GenericViewSet):
     permission_classes = (IsAuthenticated, IsDoctorOrChief)
-
-    neural_network_instance_var = NeuralNetwork()
     photo_object_var = Photo()
 
     @staticmethod
@@ -551,7 +549,7 @@ class LoadImageClass(GenericViewSet):
             return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
 
         try:
-            result = LoadImageClass.neural_network_instance_var.predict_image(
+            result = NeuralNetwork.predict_image(
                 Photo.get_absolute_file_path(filename, '.jpeg'))
             file = LoadImageClass.photo_object_var.convert_image(Photo.get_absolute_file_path(filename, '.jpeg'))
             return JsonResponse({'message': result, 'file': file}, status=status.HTTP_200_OK)
@@ -611,7 +609,7 @@ class ParsingUtils():
         fs, filename, file_url = save_file(img)  # сохранение dcm
 
         try:
-            final_image, jpg_path = LoadImageClass.neural_network_instance_var.dicom_to_jpg(file_url, filename)
+            final_image, jpg_path = NeuralNetwork.convert_dicom_to_jpg(file_url, filename)
         except Exception:
             raise Exception()
         final_image.save(jpg_path)  # сохранение jpeg
