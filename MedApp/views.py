@@ -427,6 +427,7 @@ class EditPatientClass(GenericViewSet):
         global ed_file_name
         diagnosis = request.POST.get('diagnosis')
         photo_id = request.POST.get('pk')
+        img = request.FILES['file']
 
         if photo_id != '0':
             photo_transfer = EditPatientClass.edit_photo(photo_id, diagnosis)
@@ -437,12 +438,13 @@ class EditPatientClass(GenericViewSet):
             patient = Patient.objects.get(pk=pat)
 
             try:
-                ed_file_name = ParsingUtils.parse_and_save_images(request)
+                ed_file_name = ParsingUtils.parse_and_save_images(request, img)
             except ValueError:
                 return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                     status=status.HTTP_409_CONFLICT)
             except Exception:
-                return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
+                return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'},
+                                    status=status.HTTP_409_CONFLICT)
 
             actual_photo = Photo.objects.filter(patient_number=pat).get(actual=1)
             if actual_photo.date_of_creation.timestamp() > date.timestamp():
@@ -538,15 +540,16 @@ class LoadImageClass(GenericViewSet):
         return JsonResponse({'message': '', 'patients': patients}, status=status.HTTP_200_OK, safe=False)
 
     def post_predict(self, request):
-        # time.sleep(1.5)
+        img = request.FILES['file']
+
         try:
-            filename = ParsingUtils.parse_and_save_images(request)
+            filename = ParsingUtils.parse_and_save_images(request, img)
         except ValueError:
-            ParsingUtils.remove_images(ed_file_name)
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
         except Exception:
-            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
+            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'},
+                                status=status.HTTP_409_CONFLICT)
 
         try:
             result = NeuralNetwork.predict_image(
@@ -559,16 +562,17 @@ class LoadImageClass(GenericViewSet):
             ParsingUtils.remove_images(filename)
 
     def post_save(self, request):
+        img = request.FILES['file']
         date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
 
         try:
-            filename = ParsingUtils.parse_and_save_images(request)
+            filename = ParsingUtils.parse_and_save_images(request, img)
         except ValueError:
-            ParsingUtils.remove_images(ed_file_name)
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
         except Exception:
-            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'}, status=status.HTTP_409_CONFLICT)
+            return JsonResponse({'message': 'Неверный тип файла: загрузите файл формата dicom'},
+                                status=status.HTTP_409_CONFLICT)
 
         try:
             diagnosis, patient_id = LoadImageClass.parse_save_request(request)
@@ -597,28 +601,30 @@ class LoadImageClass(GenericViewSet):
 # ----------------------- additional classes -----------------------#
 class ParsingUtils():
     @staticmethod
-    def parse_and_save_images(request):
-        img = request.FILES['file']
+    def parse_and_save_images(request, img):
 
         try:
-            if Photo.objects.get(photo=img):
-                raise ValueError
+            ph = Photo.objects.get(photo=img)
         except Exception:
-            pass
+            ph = Photo.objects.none()
+
+        if ph:
+            raise ValueError
 
         fs, filename, file_url = save_file(img)  # сохранение dcm
 
         try:
             final_image, jpg_path = NeuralNetwork.convert_dicom_to_jpg(file_url, filename)
         except Exception:
+            ParsingUtils.remove_images(filename)
             raise Exception()
         final_image.save(jpg_path)  # сохранение jpeg
         return filename
 
     @staticmethod
     def remove_images(filename):
-        os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
         os.remove(Photo.get_absolute_file_path(filename))
+        os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
 
 
 class CheckingUtils():
