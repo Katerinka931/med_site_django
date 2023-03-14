@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
+from MedApp.medical_report_to_docx import MedicalReport
 from MedApp.permissions.custom_permissions import *
 from MedApp.models import Patient, Photo, User
 from MedApp.serializers.DTO import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
@@ -357,9 +358,11 @@ class EditPatientClass(GenericViewSet):
         return photo_transfer
 
     @staticmethod
-    def edit_photo(photo_id, diagnosis):
+    def edit_photo(photo_id, diagnosis, user):
         actual_photo = Photo.objects.get(pk=photo_id)
         actual_photo.diagnosis = diagnosis
+        actual_photo.date_of_research = datetime.now()
+        actual_photo.researcher = user.pk
         actual_photo.save()
         return EditPatientClass.get_photo_transfer(actual_photo.photo)
 
@@ -425,12 +428,19 @@ class EditPatientClass(GenericViewSet):
 
     def post_photo_instance(self, request, pat):
         global ed_file_name
+
+        user = request.user
         diagnosis = request.POST.get('diagnosis')
         photo_id = request.POST.get('pk')
-        img = request.FILES['file']
+        images = request.FILES
+
+        if len(images) == 0:
+            img = Photo.objects.get(pk=photo_id)
+        else:
+            img = request.FILES['file']
 
         if photo_id != '0':
-            photo_transfer = EditPatientClass.edit_photo(photo_id, diagnosis)
+            photo_transfer = EditPatientClass.edit_photo(photo_id, diagnosis, user)
             return JsonResponse({'message': 'Редактирование успешно', 'photo': vars(photo_transfer)},
                                 status=status.HTTP_200_OK)
         else:
@@ -438,7 +448,7 @@ class EditPatientClass(GenericViewSet):
             patient = Patient.objects.get(pk=pat)
 
             try:
-                ed_file_name = ParsingUtils.parse_and_save_images(request, img)
+                ed_file_name = ParsingUtils.parse_and_save_images(request, img, True)
             except ValueError:
                 return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                     status=status.HTTP_409_CONFLICT)
@@ -452,7 +462,7 @@ class EditPatientClass(GenericViewSet):
                 return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                     status=status.HTTP_409_CONFLICT)
 
-            Photo.create_photo(patient, ed_file_name, diagnosis, date)
+            Photo.create_photo(patient, ed_file_name, diagnosis, date, user)
             photo_transfer = EditPatientClass.get_photo_transfer(ed_file_name)
             return JsonResponse({'message': 'Редактирование успешно', 'photo': vars(photo_transfer)},
                                 status=status.HTTP_200_OK)
@@ -488,6 +498,18 @@ class PatientsInfoClass(GenericViewSet):
         photos = ListOfObjects.get_photos_list(photo_objects)
         return JsonResponse({'message': '', 'photos': photos},
                             status=status.HTTP_200_OK, safe=False)
+
+    def get_report(self, request, pat):
+        patient = Patient.objects.get(pk=pat)
+        photo_id = request.GET.get('id')
+        photo = Photo.objects.get(pk=photo_id)
+        doctor = User.objects.get(pk=photo.researcher)
+
+        name = MedicalReport.create_report1(doctor, patient, photo.diagnosis, photo)
+        document = MedicalReport.docx_to_base64(name)
+        os.remove(name)
+
+        return JsonResponse({'name': name, 'doc': document}, status=status.HTTP_200_OK, safe=False)
 
     def download(self, request, pat, type):
         photo_id = request.GET.get('id')
@@ -543,7 +565,7 @@ class LoadImageClass(GenericViewSet):
         img = request.FILES['file']
 
         try:
-            filename = ParsingUtils.parse_and_save_images(request, img)
+            filename = ParsingUtils.parse_and_save_images(request, img, False)
         except ValueError:
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
@@ -562,11 +584,12 @@ class LoadImageClass(GenericViewSet):
             ParsingUtils.remove_images(filename)
 
     def post_save(self, request):
+        user = request.user
         img = request.FILES['file']
         date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
 
         try:
-            filename = ParsingUtils.parse_and_save_images(request, img)
+            filename = ParsingUtils.parse_and_save_images(request, img, True)
         except ValueError:
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
@@ -588,28 +611,41 @@ class LoadImageClass(GenericViewSet):
                     return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                         status=status.HTTP_409_CONFLICT)
 
-            Photo.create_photo(patient, filename, diagnosis, date)
+            Photo.create_photo(patient, filename, diagnosis, date, user)
             patient.save()
             return JsonResponse({'message': 'Данные сохранены'}, status=status.HTTP_200_OK)
-
         except Exception:
             ParsingUtils.remove_images(filename)
             return JsonResponse({'message': 'Пациент не выбран'},
                                 status=status.HTTP_409_CONFLICT)
 
+    def get_report(self, request):
+        user = request.user
+        patient_id = request.GET.get('id')
+
+        patient = Patient.objects.get(pk=patient_id)
+        photo = Photo.objects.filter(patient_number_id=patient).get(actual=1)
+
+        name = MedicalReport.create_report(user, patient, photo.diagnosis, photo)
+        document = MedicalReport.docx_to_base64(name)
+        os.remove(name)
+
+        return JsonResponse({'name': name, 'doc': document}, status=status.HTTP_200_OK, safe=False)
+
 
 # ----------------------- additional classes -----------------------#
 class ParsingUtils():
     @staticmethod
-    def parse_and_save_images(request, img):
+    def parse_and_save_images(request, img, flag):
 
-        try:
-            ph = Photo.objects.get(photo=img)
-        except Exception:
-            ph = Photo.objects.none()
+        if flag:
+            try:
+                ph = Photo.objects.get(photo=img)
+            except Exception:
+                ph = Photo.objects.none()
 
-        if ph:
-            raise ValueError
+            if ph:
+                raise ValueError
 
         fs, filename, file_url = save_file(img)  # сохранение dcm
 
@@ -699,12 +735,14 @@ class ListOfObjects:
 
     @staticmethod
     def get_photos_list(photo_queryset):
-
         photos = list()
         for photo in photo_queryset:
             file = photo.convert_image(Photo.get_absolute_file_path(photo.photo, '.jpeg'))
+            date_of_creation = photo.date_of_creation.strftime('%d.%m.%Y, %H:%M:%S')
+            date_of_research = photo.date_of_research.strftime('%d.%m.%Y, %H:%M:%S')
+            researcher = DoctorDTO(User.objects.get(pk=photo.researcher))
             photos.append({'id': photo.pk, 'photo': file, 'diagnosis': photo.diagnosis,
-                           'date': photo.date_of_creation.strftime('%d.%m.%Y, %H:%M:%S')})
+                           'date': date_of_creation, 'research_date': date_of_research, 'researcher': vars(researcher)})
         return photos
 
 

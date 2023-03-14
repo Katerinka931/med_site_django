@@ -34,10 +34,13 @@ urlpatterns = [
                           name='patients-data'),
                   re_path(r'^patient/(?P<pat>\d+)/download/(?P<type>\w+)$',
                           PatientsInfoClass.as_view({'get': 'download'}), name='patients-data'),
+                  re_path(r'^patient/(?P<pat>\d+)/report$', PatientsInfoClass.as_view({'get': 'get_report'}), name='report'),
 
                   re_path(r'^load_image$', views.LoadImageClass.as_view({'get': 'get', 'post': 'post_predict'}),
                           name='load-image'),
                   re_path(r'^load_image/save$', views.LoadImageClass.as_view({'post': 'post_save'}),
                           name='load-image-save'),
+                  re_path(r'^load_image/download_report$', views.LoadImageClass.as_view({'get': 'get_report'}),
+                          name='load-image-save-report'),
 
               ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

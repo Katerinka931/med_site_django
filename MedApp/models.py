@@ -1,6 +1,6 @@
 import os
 import base64
-
+import datetime
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -123,6 +123,8 @@ class Photo(models.Model):
     actual = models.CharField(max_length=5)
     diagnosis = models.CharField(max_length=10000, null=True)
     date_of_creation = models.DateTimeField(null=True)
+    date_of_research = models.DateTimeField(null=True)
+    researcher = models.IntegerField(null=True)
 
     class Meta:
         ordering = ["patient_number_id", "-date_of_creation"]
@@ -149,7 +151,7 @@ class Photo(models.Model):
     display_patient.short_description = 'Patient'
 
     @staticmethod
-    def create_photo(patient, filename, diagnosis, date):
+    def create_photo(patient, filename, diagnosis, date, user):
         photo = Photo()
         photo.photo = filename
 
@@ -158,4 +160,6 @@ class Photo(models.Model):
         photo.actual = 1
         photo.patient_number = patient
         photo.date_of_creation = date
+        photo.date_of_research = datetime.datetime.now()
+        photo.researcher = user.pk
         photo.save()
