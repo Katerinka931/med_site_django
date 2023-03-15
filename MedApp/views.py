@@ -505,7 +505,7 @@ class PatientsInfoClass(GenericViewSet):
         photo = Photo.objects.get(pk=photo_id)
         doctor = User.objects.get(pk=photo.researcher)
 
-        name = MedicalReport.create_report1(doctor, patient, photo.diagnosis, photo)
+        name = MedicalReport.create_report(doctor, patient, photo.diagnosis, photo)
         document = MedicalReport.docx_to_base64(name)
         os.remove(name)
 
