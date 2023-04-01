@@ -750,7 +750,7 @@ class ListOfObjects:
 def remove_person(remove_id, user_role, deleted_person_type):
     if (user_role == User.ADMIN or user_role == User.CHIEF) and deleted_person_type == 'user':
         doctor = User()
-        doctor.remove_doctor(remove_id)
+        doctor.remove_user(remove_id)
     else:
         patient = Patient()
         patient.remove_patient(remove_id)

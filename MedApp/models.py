@@ -77,7 +77,7 @@ class User(AbstractUser):
         user.role = role
         user.save()
 
-    def remove_doctor(self, pk):
+    def remove_user(self, pk):
         remove_doctor = User.objects.get(pk=pk)
         User.objects.get(username=remove_doctor.username).delete()
         remove_doctor.delete()

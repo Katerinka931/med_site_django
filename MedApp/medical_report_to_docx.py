@@ -4,10 +4,11 @@ from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-storage_path = os.getcwd() + '/temp_storage/'
-
 
 class MedicalReport():
+
+    storage_path = os.getcwd() + '/temp_storage/'
+
     @staticmethod
     def docx_to_base64(name):
         data = open(name, "rb").read()
@@ -48,7 +49,7 @@ class MedicalReport():
         par5.add_run('Снимок').bold = True
         par5.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        doc.add_picture(storage_path + photo.photo + '.jpeg', width = Cm(13))
+        doc.add_picture(MedicalReport.storage_path + photo.photo + '.jpeg', width = Cm(13))
         last_paragraph = doc.paragraphs[-1]
         last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
