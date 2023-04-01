@@ -12,11 +12,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
+from MedApp.Utils import CheckingUtils, ParsingAndEditUtils
 from MedApp.medical_report_to_docx import MedicalReport
 from MedApp.permissions.custom_permissions import *
 from MedApp.models import Patient, Photo, User
 from MedApp.serializers.DTO import DoctorDTO, PatientDTO, DoctorWithPatientsDTO, PhotoDTO
-from MedApp.neural_network import NeuralNetwork, save_file
+from MedApp.neural_network import NeuralNetwork
+
+
+@api_view(['POST'])
+def user_logout(request):
+    logout(request)
+    return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
 
 class MainListClass(APIView):
@@ -41,7 +48,7 @@ class MainListClass(APIView):
         remove_id = request.GET.get("remove")
 
         if remove_id is not None:
-            remove_person(remove_id, user.role, 'user')
+            ParsingAndEditUtils.remove_person(remove_id, user.role, 'user')
             people = ListOfObjects.get_list_of_people_to_main_page(pk, user.role)
             return JsonResponse(
                 {'message': 'Удаление успешно', 'people': people}, status=status.HTTP_200_OK)
@@ -75,7 +82,7 @@ class PatientsListClass(APIView):
         doctor = User.objects.get(id=pk)
         remove_id = request.GET.get("remove")
         if remove_id is not None:
-            remove_person(remove_id, doctor.role, 'pat')
+            ParsingAndEditUtils.remove_person(remove_id, doctor.role, 'pat')
             return JsonResponse({'message': 'Удаление успешно'}, status=status.HTTP_200_OK, safe=False)
         else:
             return JsonResponse({'message': 'Элемент не выбран/не найден'}, status=status.HTTP_404_NOT_FOUND)
@@ -280,7 +287,7 @@ class UserInfoClass(APIView):
         doctor_transfer_object = DoctorWithPatientsDTO(doctor, patients)
 
         if remove_id is not None:
-            remove_person(remove_id, doctor.role, 'pat')
+            ParsingAndEditUtils.remove_person(remove_id, doctor.role, 'pat')
             return JsonResponse({'message': 'Удаление успешно', 'user': vars(doctor_transfer_object)},
                                 status=status.HTTP_200_OK, safe=False)
         else:
@@ -448,7 +455,7 @@ class EditPatientClass(GenericViewSet):
             patient = Patient.objects.get(pk=pat)
 
             try:
-                ed_file_name = ParsingUtils.parse_and_save_images(request, img, True)
+                ed_file_name = ParsingAndEditUtils.parse_and_save_images(img, True)
             except ValueError:
                 return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                     status=status.HTTP_409_CONFLICT)
@@ -458,7 +465,7 @@ class EditPatientClass(GenericViewSet):
 
             actual_photo = Photo.objects.filter(patient_number=pat).get(actual=1)
             if actual_photo.date_of_creation.timestamp() > date.timestamp():
-                ParsingUtils.remove_images(ed_file_name)
+                ParsingAndEditUtils.remove_images(ed_file_name)
                 return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                     status=status.HTTP_409_CONFLICT)
 
@@ -526,7 +533,7 @@ class PatientsInfoClass(GenericViewSet):
         photo_objects = Photo.objects.filter(patient_number_id=pat)
         deleted_photo = photo_objects.get(pk=photo_id)
         deleted_photo.delete()
-        ParsingUtils.remove_images(deleted_photo.photo)
+        ParsingAndEditUtils.remove_images(deleted_photo.photo)
 
         list_of_photos = ListOfObjects.get_photos_list(photo_objects)
         if len(list_of_photos) > 0:
@@ -565,7 +572,7 @@ class LoadImageClass(GenericViewSet):
         img = request.FILES['file']
 
         try:
-            filename = ParsingUtils.parse_and_save_images(request, img, False)
+            filename = ParsingAndEditUtils.parse_and_save_images(img, False)
         except ValueError:
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
@@ -581,7 +588,7 @@ class LoadImageClass(GenericViewSet):
         except Exception:
             return JsonResponse({'message': 'Не удалось обработать файл'}, status=status.HTTP_409_CONFLICT)
         finally:
-            ParsingUtils.remove_images(filename)
+            ParsingAndEditUtils.remove_images(filename)
 
     def post_save(self, request):
         user = request.user
@@ -589,7 +596,7 @@ class LoadImageClass(GenericViewSet):
         date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
 
         try:
-            filename = ParsingUtils.parse_and_save_images(request, img, True)
+            filename = ParsingAndEditUtils.parse_and_save_images(img, True)
         except ValueError:
             return JsonResponse({'message': 'Фото с таким именем уже есть в хранилище и в базе данных. '},
                                 status=status.HTTP_409_CONFLICT)
@@ -607,7 +614,7 @@ class LoadImageClass(GenericViewSet):
                 current_photo = photos_instances.get(actual=1)
 
                 if current_photo.date_of_creation.timestamp() > date.timestamp():
-                    ParsingUtils.remove_images(filename)
+                    ParsingAndEditUtils.remove_images(filename)
                     return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                         status=status.HTTP_409_CONFLICT)
 
@@ -615,7 +622,7 @@ class LoadImageClass(GenericViewSet):
             patient.save()
             return JsonResponse({'message': 'Данные сохранены'}, status=status.HTTP_200_OK)
         except Exception:
-            ParsingUtils.remove_images(filename)
+            ParsingAndEditUtils.remove_images(filename)
             return JsonResponse({'message': 'Пациент не выбран'},
                                 status=status.HTTP_409_CONFLICT)
 
@@ -633,46 +640,7 @@ class LoadImageClass(GenericViewSet):
         return JsonResponse({'name': name, 'doc': document}, status=status.HTTP_200_OK, safe=False)
 
 
-# ----------------------- additional classes -----------------------#
-class ParsingUtils():
-    @staticmethod
-    def parse_and_save_images(request, img, flag):
-
-        if flag:
-            try:
-                ph = Photo.objects.get(photo=img)
-            except Exception:
-                ph = Photo.objects.none()
-
-            if ph:
-                raise ValueError
-
-        fs, filename, file_url = save_file(img)  # сохранение dcm
-
-        try:
-            final_image, jpg_path = NeuralNetwork.convert_dicom_to_jpg(file_url, filename)
-        except Exception:
-            ParsingUtils.remove_images(filename)
-            raise Exception()
-        final_image.save(jpg_path)  # сохранение jpeg
-        return filename
-
-    @staticmethod
-    def remove_images(filename):
-        os.remove(Photo.get_absolute_file_path(filename))
-        os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
-
-
-class CheckingUtils():
-    @staticmethod
-    def check_phone(phone):
-        try:
-            int(phone)
-            return True
-        except ValueError:
-            return False
-
-
+# ----------------------- additional class -----------------------#
 class ListOfObjects:
     @staticmethod
     def get_patients_list(patients_queryset):
@@ -744,30 +712,3 @@ class ListOfObjects:
             photos.append({'id': photo.pk, 'photo': file, 'diagnosis': photo.diagnosis,
                            'date': date_of_creation, 'research_date': date_of_research, 'researcher': vars(researcher)})
         return photos
-
-
-# ----------------------- additional functions to change-----------------------#
-def remove_person(remove_id, user_role, deleted_person_type):
-    if (user_role == User.ADMIN or user_role == User.CHIEF) and deleted_person_type == 'user':
-        doctor = User()
-        doctor.remove_user(remove_id)
-    else:
-        patient = Patient()
-        patient.remove_patient(remove_id)
-
-
-@api_view(['POST'])
-def user_logout(request):
-    logout(request)
-    return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
-
-
-def create_user(self, login, email, password, firstname, lastname, middlename, phone, role):
-    user = User.objects.create_user(login, email, password)
-    user.first_name = firstname
-    user.last_name = lastname
-    user.middle_name = middlename
-    user.phone = phone
-    user.role = role
-    user.is_staff = True
-    user.save()
