@@ -68,6 +68,8 @@ class User(AbstractUser):
             user = User.objects.create_user(login, email, password)
         else:
             user = self
+            user.email = email
+            user.username = login
         user.first_name = firstname
         user.last_name = lastname
         user.middle_name = middlename
