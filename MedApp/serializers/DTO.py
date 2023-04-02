@@ -57,3 +57,5 @@ class PhotoDTO(object):
         self.patient = photo.patient_number_id
         self.photo = file
         self.date_of_creation = datetime.timestamp(photo.date_of_creation)
+        self.date_of_research = photo.date_of_research
+        self.researcher = photo.researcher

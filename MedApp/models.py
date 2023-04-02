@@ -116,7 +116,14 @@ class Patient(models.Model):
         patient.save()
 
     def remove_patient(self, pk):
-        Patient.objects.get(pk=pk).delete()
+        patient = Patient.objects.get(pk=pk)
+        photos = Photo.objects.filter(patient_number_id=pk)
+        if len(photos) != 0:
+            for p in photos:
+                filename = p.photo
+                os.remove(Photo.get_absolute_file_path(filename))
+                os.remove(Photo.get_absolute_file_path(filename, '.jpeg'))
+        patient.delete()
 
 
 class Photo(models.Model):

@@ -4,7 +4,7 @@ from MedApp.models import Photo, Patient, User
 from MedApp.neural_network import NeuralNetwork, save_file
 
 
-class ParsingAndEditUtils():
+class ParsingAndEditUtils:
     @staticmethod
     def parse_and_save_images(img, flag):
 
@@ -42,7 +42,7 @@ class ParsingAndEditUtils():
             patient.remove_patient(remove_id)
 
 
-class CheckingUtils():
+class CheckingUtils:
     @staticmethod
     def check_phone(phone):
         try:

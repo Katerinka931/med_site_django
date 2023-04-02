@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from MedApp.Utils import CheckingUtils, ParsingAndEditUtils
+from MedApp.utils import CheckingUtils, ParsingAndEditUtils
 from MedApp.medical_report_to_docx import MedicalReport
 from MedApp.permissions.custom_permissions import *
 from MedApp.models import Patient, Photo, User

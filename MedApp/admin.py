@@ -46,9 +46,9 @@ class PatientAdmin(admin.ModelAdmin):
 
 @admin.register(Photo)
 class PhotoAdmin(admin.ModelAdmin):
-    list_display = ('photo', 'actual', 'date_of_creation', 'diagnosis', 'display_patient')
-    list_filter = ('actual', 'date_of_creation')
-    fields = ['photo', 'diagnosis', 'actual', 'date_of_creation', 'patient_number']
+    list_display = ('photo', 'actual', 'date_of_creation', 'diagnosis', 'display_patient', 'date_of_research')
+    list_filter = ('actual', 'date_of_creation', 'date_of_research')
+    fields = ['photo', 'diagnosis', 'actual', 'date_of_creation', 'patient_number', 'date_of_research']
 
     def has_add_permission(self, request):
         return False
