@@ -11,7 +11,7 @@ from PIL import Image
 
 storage_path = os.getcwd() + '/temp_storage/'
 
-model = keras.models.load_model(os.getcwd() + "/KerasModel", custom_objects=None,
+model = keras.models.load_model(os.getcwd() + "/KerasModel1", custom_objects=None,
                                 compile=True,
                                 options=None)
 
