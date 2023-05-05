@@ -25,7 +25,10 @@ def user_logout(request):
     logout(request)
     return JsonResponse({'message': 'Вы вышли из системы'}, status=status.HTTP_200_OK)
 
-
+from tensorflow import keras
+model = keras.models.load_model(os.getcwd() + "/KerasModel1", custom_objects=None,
+                                compile=True,
+                                options=None)
 class MainListClass(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -452,8 +455,6 @@ class EditPatientClass(GenericViewSet):
                                 status=status.HTTP_200_OK)
         else:
             date = datetime.fromtimestamp(int(request.POST['date'][0:10]))  # дата создания дикома
-            patient = Patient.objects.get(pk=pat)
-
             try:
                 ed_file_name = ParsingAndEditUtils.parse_and_save_images(img, True)
             except ValueError:
@@ -469,7 +470,14 @@ class EditPatientClass(GenericViewSet):
                 return JsonResponse({'message': 'Фото сделано раньше, чем актуальный вариант.'},
                                     status=status.HTTP_409_CONFLICT)
 
-            Photo.create_photo(patient, ed_file_name, diagnosis, date, user)
+            actual_photo.diagnosis = diagnosis
+            actual_photo.date_of_creation = date
+            actual_photo.date_of_research = datetime.now()
+            ParsingAndEditUtils.remove_images(actual_photo.photo)
+            actual_photo.photo = img.name
+            actual_photo.researcher = user.pk
+            actual_photo.save()
+
             photo_transfer = EditPatientClass.get_photo_transfer(ed_file_name)
             return JsonResponse({'message': 'Редактирование успешно', 'photo': vars(photo_transfer)},
                                 status=status.HTTP_200_OK)
@@ -501,10 +509,14 @@ class PatientsInfoClass(GenericViewSet):
                                 status=status.HTTP_200_OK, safe=False)
 
     def get_photos_history(self, request, pat):
-        photo_objects = Photo.objects.filter(patient_number_id=pat)
-        photos = ListOfObjects.get_photos_list(photo_objects)
-        return JsonResponse({'message': '', 'photos': photos},
-                            status=status.HTTP_200_OK, safe=False)
+        try:
+            photo_objects = Photo.objects.filter(patient_number_id=pat)
+            photos = ListOfObjects.get_photos_list(photo_objects)
+            return JsonResponse({'message': '', 'photos': photos},
+                                status=status.HTTP_200_OK, safe=False)
+        except Exception:
+            return JsonResponse({'message': 'Ошибка сервера. Возможно, не существует вызываемый файл.',},
+                                status=status.HTTP_404_NOT_FOUND, safe=False)
 
     def get_report(self, request, pat):
         patient = Patient.objects.get(pk=pat)

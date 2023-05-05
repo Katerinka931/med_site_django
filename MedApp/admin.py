@@ -39,9 +39,7 @@ class PatientAdmin(admin.ModelAdmin):
         ('Contacts', {
             'fields': ('email', 'phone')
         }),
-        ('Attending doctor', {'fields': ('doctor_number',)}),
     )
-    inlines = [PhotoInstanceInline]
 
 
 @admin.register(Photo)
